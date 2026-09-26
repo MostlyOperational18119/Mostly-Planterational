@@ -8,17 +8,27 @@ The **FTC SDK** (`FtcRobotController`) plus team code for **BIOBUZZ**, competing
 `FtcRobotController/`, `build.common.gradle`, `libs/`, `doc/`, and the (very large)
 `README.md` come from FIRST's upstream
 [FtcRobotController](https://github.com/FIRST-Tech-Challenge/FtcRobotController) repo
-(currently v11.2 / SDK 11.2.1). **Don't edit them** unless a task is specifically about
+(currently v12.0). **Don't edit them** unless a task is specifically about
 upgrading the SDK — keeping them pristine is what makes SDK updates mergeable.
 
 All team code lives in `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/`.
 
 ```
 TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
+├── Robot.java        Subsystem registry + the loop contract (startCycle/read/update/
+│                     execute/write/telemetry). OpModes call robot.cycle().
+├── subsystems/       Drive.java — Pedro Follower wrapped as a requirable subsystem
+├── util/             Subsystem.java (the periodic hook Ivy lacks)
+│                     HubManager.java / LynxHubs.java (bulk-cache control)
+│                     LoopTimer.java, WriteGate.java, Timeouts.java, Fork.java
 ├── pedroPathing/     Constants.java (FollowerConstants, PathConstraints, createFollower)
 │                     Tuning.java (Pedro's tuning OpModes)
-└── teleop/           CommandTeleOpDemo.java — current Ivy + Pedro reference OpMode
+└── teleop/           DriveTeleOp.java — driver control on the loop contract
+                      CommandTeleOpDemo.java — upstream Ivy + Pedro reference, not an OpMode
 ```
+
+Only `Drive` exists so far: steps 1–2 of the architecture doc's implementation order (§10).
+`commands/`, `routines/` and `auto/` appear when there is a mechanism to command.
 
 ## Libraries
 
@@ -45,7 +55,7 @@ AprilTag/neural pipeline on its own processor and returns a finished result over
 Ethernet-over-USB. Driver: `com.qualcomm.hardware.limelightvision.Limelight3A`, shipped with
 the SDK — no extra dependency.
 
-Two things matter when writing code against it (both verified in the SDK 11.2.1 sources):
+Two things matter when writing code against it (both verified in the SDK 12.0 sources):
 
 - The driver runs **its own polling thread** (`ScheduledExecutorService`, 100 Hz by default)
   and stores the result in a `volatile` field. `getLatestResult()` just reads that field, so
@@ -127,8 +137,80 @@ Android Gradle Plugin 9.4.0, Java 8 source/target, `minSdk 24`, `compileSdk 30`.
 `minSdk 24` means `java.util.function` and `java.util.stream` (which Ivy uses heavily) are
 available without desugaring.
 
-There is no test harness — the robot is the test. Verify changes compile, then check loop
-timing telemetry on the hardware.
+Verify changes compile, then check the loop-timing telemetry on the hardware. See
+**Testing** below for what can and cannot be tested off the robot.
+
+## Testing
+
+There is no automated test harness yet; today the robot is the test. This section records
+what was measured about the obstacles, because the shape of the harness follows from it.
+
+### Why the FTC SDK resists unit testing
+
+The SDK ships as Android AARs, so anything that touches the Android runtime cannot load in a
+JVM unit test. Verified against the SDK 12.0 sources:
+
+| | Loads on a plain JVM? |
+|---|---|
+| `DcMotorEx`, `DcMotor`, `Servo`, `HardwareDevice`, `Telemetry` | **Yes** — plain interfaces, no `android.*` imports |
+| Pedro `core` (`Follower`, `Localizer`, `Drivetrain`, `Pose`, `PathChain`) and all of Ivy | **Yes** — ordinary Java jars |
+| `HardwareMap` | No — requires an `android.content.Context` and `com.qualcomm.robotcore.R` |
+| `LynxModule` | No — concrete class over USB/RS-485 comms |
+| `LinearOpMode` / `OpMode` | No — extends `OpModeInternal`, needs the app's event loop |
+
+So the untestable surface is small and well-defined: **`HardwareMap`, the hubs, and the
+OpMode base class.** Everything else our code is built from already runs headless.
+
+### What the current code does about it
+
+These are deliberate choices in the shell, not accidents — keep them when adding subsystems:
+
+1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower)`, with
+   `Robot.fromHardwareMap(hw)` as the competition path. A `HardwareMap` never reaches
+   anything below that factory.
+2. **New subsystems take their devices, never a `HardwareMap`** — `new Lift(DcMotorEx motor)`
+   plus a static `fromHardwareMap` factory that does the lookups. `DcMotorEx` is an
+   interface, so the constructor-injected form is testable and the factory is the only
+   untestable line.
+3. **Bulk caching sits behind `HubManager`**, so `LynxModule` is confined to `LynxHubs`;
+   tests pass `HubManager.NONE`.
+4. **The loop lives in `Robot.cycle()`, not in the OpMode.** OpModes are ~20 lines of glue.
+   Anything that can call `cycle()` in a `for` loop can run the robot.
+5. **Pure logic has zero SDK imports** — `LoopTimer` (clock injectable), `WriteGate`,
+   `Timeouts`. These need nothing but JUnit.
+
+Point 4 plus point 1 turns out to be enough for real tests today. `Follower`'s public
+constructor takes `(FollowerConstants, Localizer, Drivetrain, PathConstraints)`, and
+`Localizer` is an interface while `Drivetrain` is an abstract class — both from Pedro's plain
+jar. A hand-written fake localizer and a recording drivetrain give a **simulated robot with no
+Android and no mocking framework at all.** This was confirmed by spiking it: the team code
+compiles with plain `javac`, and a headless harness scheduling `drive.teleopDrive(...)` and
+calling `robot.cycle()` in a loop drives the fake drivetrain, gets preempted by
+`drive.turnTo(0)`, and resumes driver control when the turn completes — the full
+requirement/suspend/resume path, off the robot.
+
+### The three tiers, in the order they should be built
+
+1. **Pure logic** — `LoopTimer`, `WriteGate`, `Timeouts`, and any aim/geometry math. JUnit
+   only. Nothing blocks this today.
+2. **Simulated robot** — fake `Localizer` + recording `Drivetrain`, subsystems built from
+   mocked SDK interfaces, routines stepped with `robot.cycle()`. Asserts the things that
+   actually go wrong: a routine that never finishes, a command that ends without releasing a
+   requirement, two commands fighting over an actuator, a missing timeout.
+3. **Stub SDK** *(the later project)* — headless `HardwareMap`, hubs and `LinearOpMode` so
+   OpModes themselves can run. Tier 2 covers everything below the OpMode, so this only buys
+   the last glue layer — worth scoping against Robolectric, which solves the same problem by
+   supplying an Android runtime instead of a stub. The hazard to design around is classpath
+   collision: a stub sharing fully-qualified names with the real AARs must *replace* them on
+   the test classpath, not sit alongside them.
+
+Open questions for whoever picks up the harness ticket: JUnit 4.13.2 and (if mocks are
+wanted) mockito-core 4.x, since the 5.x line requires Java 11 and this module is Java 8;
+`testOptions.unitTests.returnDefaultValues = true` in `build.common.gradle`; tests in
+`TeamCode/src/test/java`; and whether tier 3 is a stub SDK or Robolectric.
+
+None of this replaces the loop-timing telemetry check on the hardware — a test can prove a
+routine terminates, but only the robot can tell you the loop held 6 ms.
 
 ## Conventions
 

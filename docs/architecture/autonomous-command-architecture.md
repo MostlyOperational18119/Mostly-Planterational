@@ -1,7 +1,8 @@
 # BIOBUZZ Autonomous Architecture — Ivy + Pedro Pathing
 
-**Team:** BIOBUZZ · **Season:** FTC 2026–27 · **Status:** Design, not yet implemented
-**Targets:** `com.pedropathing:ivy:1.0.0`, `com.pedropathing:ftc:2.1.2`, FTC SDK 11.2.1
+**Team:** BIOBUZZ · **Season:** FTC 2026–27 · **Status:** §10 steps 1–2 implemented (`Robot`,
+`Subsystem`, `Drive`, loop instrumentation); the rest is still design
+**Targets:** `com.pedropathing:ivy:1.0.0`, `com.pedropathing:ftc:2.1.2`, FTC SDK 12.0
 
 ---
 
@@ -95,6 +96,7 @@ against this design must account for them.
 | `Parallel`, `Race`, `Deadline` store children in a `HashMap` | Child `execute()` order within a cycle is non-deterministic | Harmless under our read/compute/write split (§4.2) — only the *last* value written per actuator matters, and writes happen after all commands run. Do not rely on ordering |
 | `Race.execute()` `break`s on the first finished child | Children later in iteration order miss one `execute()` on the terminating cycle | Never put a side-effecting final action in a `race` child; put it after the race |
 | `Sequential.end(SUSPENDED)` and `Repeat.end(SUSPENDED)` call `commands.get(index)` unguarded | `IndexOutOfBoundsException` if suspended exactly when `index == size` | Do not set `InterruptedBehavior.SUSPEND` on a `sequential`/`repeat` group. Suspend leaf commands only |
+| A resumed command does not get `start()` again — `Scheduler.execute()` moves a suspended command back into `runningCommands` and re-adds its requirements, but never calls `start()` | Anything a command established in `start()` is lost after a suspend/resume cycle (e.g. `follower.startTeleOpDrive()`, which a path command in between will have undone) | Re-establish such state in the subsystem's `write()`, keyed off a setpoint field, so it is self-healing. See `Drive.write()` |
 | `Scheduler` state is static | Commands leak between OpModes | `Scheduler.reset()` first line of `runOpMode()` |
 
 ---
@@ -535,7 +537,7 @@ it, described in §7.3.
 
 ### 7.1 What the SDK driver already does for us
 
-`com.qualcomm.hardware.limelightvision.Limelight3A` (SDK 11.2.1) is not a passive wrapper.
+`com.qualcomm.hardware.limelightvision.Limelight3A` (SDK 12.0) is not a passive wrapper.
 Verified in the SDK sources:
 
 - `start()` schedules `updateLatestResult` on the driver's **own single-thread
@@ -903,4 +905,4 @@ Each step is independently testable; nothing later is required to validate anyth
 
 *Library behaviour in §2 was verified against the `com.pedropathing:ivy:1.0.0` and
 `com.pedropathing:ftc:2.1.2` sources; the `Limelight3A` behaviour in §7 was verified
-against the FTC SDK 11.2.1 `Hardware` sources. Re-check §2.1 and §7.3 when upgrading.*
+against the FTC SDK 12.0 `Hardware` sources. Re-check §2.1 and §7.3 when upgrading.*
