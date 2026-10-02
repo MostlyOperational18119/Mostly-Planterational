@@ -18,6 +18,7 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── Robot.java        Subsystem registry + the loop contract (startCycle/read/update/
 │                     execute/write/telemetry). OpModes call robot.cycle().
 ├── subsystems/       Drive.java — Pedro Follower wrapped as a requirable subsystem
+│                     Intake.java — one open-loop motor ("intake"), collect/eject/off
 ├── util/             Subsystem.java (the periodic hook Ivy lacks)
 │                     HubManager.java / LynxHubs.java (bulk-cache control)
 │                     LoopTimer.java, WriteGate.java, Timeouts.java, Fork.java
@@ -27,8 +28,9 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
                       CommandTeleOpDemo.java — upstream Ivy + Pedro reference, not an OpMode
 ```
 
-Only `Drive` exists so far: steps 1–2 of the architecture doc's implementation order (§10).
-`commands/`, `routines/` and `auto/` appear when there is a mechanism to command.
+`Drive` and `Intake` exist so far — step 3 of the architecture doc's implementation order
+(§10) is under way. `commands/`, `routines/` and `auto/` appear when there is a routine to
+write.
 
 ## Libraries
 
@@ -165,7 +167,8 @@ OpMode base class.** Everything else our code is built from already runs headles
 
 These are deliberate choices in the shell, not accidents — keep them when adding subsystems:
 
-1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower)`, with
+1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower, Intake)` —
+   one parameter per hardware-backed subsystem — with
    `Robot.fromHardwareMap(hw)` as the competition path. A `HardwareMap` never reaches
    anything below that factory.
 2. **New subsystems take their devices, never a `HardwareMap`** — `new Lift(DcMotorEx motor)`

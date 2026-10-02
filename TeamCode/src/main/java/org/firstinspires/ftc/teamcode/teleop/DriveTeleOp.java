@@ -21,6 +21,8 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
  * driver control both require {@link org.firstinspires.ftc.teamcode.subsystems.Drive}, so the
  * scheduler interrupts driver control for the duration of the snap and resumes it afterwards
  * — no mode flags, no state machine.
+ *
+ * <p>Intake: hold right bumper to collect, left bumper to eject (eject wins if both are held).
  */
 @TeleOp(name = "Drive (Command)", group = "BIOBUZZ")
 public class DriveTeleOp extends LinearOpMode {
@@ -41,6 +43,8 @@ public class DriveTeleOp extends LinearOpMode {
                 () -> -gamepad1.left_stick_x,
                 () -> -gamepad1.right_stick_x,
                 true);
+        Command collect = robot.intake.collect();
+        Command eject = robot.intake.eject();
 
         while (opModeInInit()) {
             robot.initCycle();
@@ -54,10 +58,20 @@ public class DriveTeleOp extends LinearOpMode {
             if (gamepad1.aWasPressed()) {
                 Timeouts.limit(robot.drive.turnTo(0), SNAP_TIMEOUT_MS).schedule();
             }
+            // Eject first: on its release it cancels before collect reschedules, so letting go
+            // of eject while still holding collect drops straight back into collecting.
+            whileHeld(eject, gamepad1.left_bumper);
+            whileHeld(collect, gamepad1.right_bumper && !gamepad1.left_bumper);
             robot.cycle();
         }
 
         Scheduler.reset();
         robot.stop();
+    }
+
+    /** Level-triggered binding: {@code command} is scheduled exactly while {@code held}. */
+    private static void whileHeld(Command command, boolean held) {
+        if (held && !command.isScheduled()) command.schedule();
+        else if (!held && command.isScheduled()) command.cancel();
     }
 }

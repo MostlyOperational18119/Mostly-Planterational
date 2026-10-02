@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.Drive;
+import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.util.HubManager;
 import org.firstinspires.ftc.teamcode.util.LoopTimer;
 import org.firstinspires.ftc.teamcode.util.LynxHubs;
@@ -49,6 +50,7 @@ public class Robot {
 
     public final Follower follower;
     public final Drive drive;
+    public final Intake intake;
 
     private final HubManager hubs;
     private final List<Subsystem> subsystems;
@@ -59,19 +61,21 @@ public class Robot {
 
     /** The competition path: builds the Follower and puts every hub in MANUAL bulk caching. */
     public static Robot fromHardwareMap(HardwareMap hardwareMap) {
-        return new Robot(new LynxHubs(hardwareMap), Constants.createFollower(hardwareMap));
+        return new Robot(new LynxHubs(hardwareMap), Constants.createFollower(hardwareMap),
+                Intake.fromHardwareMap(hardwareMap));
     }
 
     /**
      * Hardware-free constructor. Subsystems are handed their collaborators; nothing below this
      * line ever sees a {@code HardwareMap}. That is what keeps the stack constructible off the
-     * robot — {@code new Robot(HubManager.NONE, follower)}.
+     * robot — {@code new Robot(HubManager.NONE, follower, new Intake(fakeMotor))}.
      */
-    public Robot(HubManager hubs, Follower follower) {
+    public Robot(HubManager hubs, Follower follower, Intake intake) {
         this.hubs = hubs;
         this.follower = follower;
         this.drive = new Drive(follower);
-        this.subsystems = Arrays.asList((Subsystem) drive);   // add new subsystems here
+        this.intake = intake;
+        this.subsystems = Arrays.<Subsystem>asList(drive, intake);   // add new subsystems here
     }
 
     public Robot withTelemetry(TelemetryManager telemetry) {
