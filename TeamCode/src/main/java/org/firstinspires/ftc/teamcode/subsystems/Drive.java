@@ -2,12 +2,15 @@ package org.firstinspires.ftc.teamcode.subsystems;
 
 import com.bylazar.telemetry.TelemetryManager;
 import com.pedropathing.follower.Follower;
+import com.pedropathing.geometry.BezierPoint;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.CommandBuilder;
+import com.pedropathing.ivy.behaviors.EndCondition;
 import com.pedropathing.ivy.behaviors.InterruptedBehavior;
 import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.pedro.PedroCommands;
+import com.pedropathing.math.MathFunctions;
 import com.pedropathing.paths.PathChain;
 
 import org.firstinspires.ftc.teamcode.util.Subsystem;
@@ -21,6 +24,10 @@ import java.util.function.DoubleSupplier;
  * declare <b>no requirements</b>, so without this wrapper two concurrently scheduled paths
  * silently fight over the drivetrain with no conflict detected (architecture doc §2.1, §5.3).
  * Every factory here appends {@code .requiring(this)}.
+ *
+ * <p>The second reason: Ivy's Pedro commands have no {@code end()} handler, so a path that is
+ * <em>interrupted</em> — by a timeout, a race, a preempting command — leaves the follower
+ * still chasing it. {@link #owned(Command)} fixes both problems at once.
  *
  * <p>Two notes on where the hardware I/O actually happens:
  *
@@ -37,6 +44,10 @@ import java.util.function.DoubleSupplier;
  */
 public class Drive implements Subsystem {
 
+    /** {@link #turnTo} and {@link #hold} finish inside these; the follower keeps correcting. */
+    private static final double HEADING_TOLERANCE = Math.toRadians(2);
+    private static final double POSITION_TOLERANCE_IN = 1.0;
+
     private final Follower follower;
 
     // --- setpoints, mutated by commands in phase 4 ---
@@ -45,6 +56,9 @@ public class Drive implements Subsystem {
     private boolean robotCentric = true;
 
     private boolean teleopWasEnabled;
+
+    // Set when a path command is interrupted; acted on in write(). See owned().
+    private boolean breakRequested;
 
     public Drive(Follower follower) {
         this.follower = follower;
@@ -57,6 +71,12 @@ public class Drive implements Subsystem {
 
     @Override
     public void write() {
+        if (breakRequested) {
+            // Writes all four drive motors plus their zero-power mode: a one-off long loop on
+            // an abort, which is why it is here and not in a command's end().
+            breakRequested = false;
+            follower.breakFollowing();
+        }
         if (teleopEnabled) {
             // Self-healing rather than done in the command's start(): the Scheduler resumes a
             // SUSPENDed command without calling start() again, and a path command that ran in
@@ -80,6 +100,7 @@ public class Drive implements Subsystem {
     @Override
     public void stop() {
         teleopEnabled = false;
+        breakRequested = false;
         if (follower.isTeleopDrive()) follower.setTeleOpDrive(0, 0, 0, robotCentric);
         follower.breakFollowing();
     }
@@ -96,28 +117,89 @@ public class Drive implements Subsystem {
         return follower.getCurrentTValue();
     }
 
-    /** A supervisor command should watch this and bail out to a park. Architecture doc §8.4. */
+    /**
+     * Diagnostic only — <b>not</b> an abort signal. {@code isRobotStuck()} turns true the
+     * first cycle Pedro sees near-zero velocity mid-path, before its own {@code stuckTimeout}
+     * has run; once that expires Pedro ends the path itself and the follow command finishes.
+     * Abort on {@link #localizationLost()} and on timeouts instead.
+     */
     public boolean stuck() {
         return follower.isRobotStuck() || follower.isLocalizationNAN();
+    }
+
+    /** The pose is NaN: no path can be followed. A routine should abort on this (§8.4). */
+    public boolean localizationLost() {
+        return follower.isLocalizationNAN();
     }
 
     // --- commands ---
 
     public CommandBuilder follow(PathChain path) {
-        return PedroCommands.follow(follower, path).requiring(this);
+        return owned(PedroCommands.follow(follower, path));
     }
 
     public CommandBuilder follow(PathChain path, double maxPower) {
-        return PedroCommands.follow(follower, path, maxPower).requiring(this);
+        return owned(PedroCommands.follow(follower, path, maxPower));
     }
 
-    /** @param radians heading in radians — the unit convention at every API boundary. */
+    /**
+     * Turns in place, finishing when the heading is within {@link #HEADING_TOLERANCE}. The
+     * follower keeps holding the heading afterwards until something else takes the drive.
+     *
+     * <p>Not {@code PedroCommands.turnTo}: that follows a zero-length path, which is at its
+     * parametric end from the first cycle, so Pedro ends it after the path-end timeout
+     * ({@code PathConstraints} timeout, 100 ms here) whatever the heading. Bound this with
+     * {@code Timeouts.limit}: it does not finish if the robot cannot turn.
+     *
+     * @param radians heading in radians — the unit convention at every API boundary.
+     */
     public CommandBuilder turnTo(double radians) {
-        return PedroCommands.turnTo(follower, radians).requiring(this);
+        return owned(Command.build()
+                .setStart(() -> follower.holdPoint(new BezierPoint(follower.getPose()), radians, false))
+                .setDone(() -> headingError(radians) < HEADING_TOLERANCE));
     }
 
+    /**
+     * Drives to and holds {@code pose}, finishing once inside {@link #POSITION_TOLERANCE_IN}
+     * and {@link #HEADING_TOLERANCE}; the hold continues after that.
+     *
+     * <p>Not {@code PedroCommands.hold}: that holds the robot's <em>current</em> heading rather
+     * than {@code pose}'s. Bound this with {@code Timeouts.limit}.
+     */
     public CommandBuilder hold(Pose pose) {
-        return PedroCommands.hold(follower, pose).requiring(this);
+        return owned(Command.build()
+                .setStart(() -> follower.holdPoint(new BezierPoint(pose), pose.getHeading(), false))
+                .setDone(() -> follower.getPose().distanceFrom(pose) < POSITION_TOLERANCE_IN
+                        && headingError(pose.getHeading()) < HEADING_TOLERANCE));
+    }
+
+    private double headingError(double target) {
+        return Math.abs(MathFunctions.getSmallestAngleDifference(follower.getPose().getHeading(), target));
+    }
+
+    /**
+     * Wraps a follower command so it requires the drivetrain and stops the follower when it is
+     * cut short. On a natural end the follower is left alone, so {@code automaticHoldEnd}
+     * still holds the final pose.
+     *
+     * <p>A wrapper rather than {@code setEnd()} on the inner command, because the stop must
+     * be cancellable: when one path preempts another, the Scheduler ends the old command
+     * <em>before</em> starting the new one in the same cycle, and the new {@code start()}
+     * clears the request so {@link #write()} does not break the path that just began.
+     */
+    private CommandBuilder owned(Command inner) {
+        return Command.build()
+                .setStart(() -> {
+                    breakRequested = false;
+                    inner.start();
+                })
+                .setExecute(inner::execute)
+                .setDone(inner::done)
+                .setEnd(endCondition -> {
+                    inner.end(endCondition);
+                    if (endCondition != EndCondition.NATURALLY) breakRequested = true;
+                })
+                .requiring(this);
     }
 
     /**

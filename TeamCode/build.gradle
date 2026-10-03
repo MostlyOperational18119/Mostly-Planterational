@@ -25,8 +25,21 @@ android {
         }
         jniLibs.useLegacyPackaging true
     }
+
+    // Host-JVM unit tests (TeamCode/src/test). Here rather than in build.common.gradle so the
+    // upstream SDK files stay pristine. See the Testing section of CLAUDE.md.
+    testOptions {
+        unitTests.all {
+            testLogging {
+                events 'failed'
+                exceptionFormat 'full'
+            }
+        }
+    }
 }
 
 dependencies {
     implementation project(':FtcRobotController')
+
+    testImplementation 'junit:junit:4.13.2'
 }

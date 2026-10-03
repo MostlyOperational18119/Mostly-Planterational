@@ -24,13 +24,24 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     LoopTimer.java, WriteGate.java, Timeouts.java, Fork.java
 ├── pedroPathing/     Constants.java (FollowerConstants, PathConstraints, createFollower)
 │                     Tuning.java (Pedro's tuning OpModes)
+├── routines/         TestRoutines.java — routine trees as static factories (§8.2)
+├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
+│                     TestPaths.java — its PathChains, built at init
 └── teleop/           DriveTeleOp.java — driver control on the loop contract
                       CommandTeleOpDemo.java — upstream Ivy + Pedro reference, not an OpMode
+
+TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
+├── sim/              SimRobot (real Robot + Follower over fakes), SimDrivetrain,
+│                     SimLocalizer, FakeMotor
+├── util/             tier 1: WriteGate, LoopTimer, Timeouts
+├── subsystems/       tier 2: IntakeTest, DriveTest
+└── routines/         tier 2: TestRoutinesTest
 ```
 
-`Drive` and `Intake` exist so far — step 3 of the architecture doc's implementation order
-(§10) is under way. `commands/`, `routines/` and `auto/` appear when there is a routine to
-write.
+`Drive` and `Intake` exist so far. Of the architecture doc's implementation order (§10),
+step 3 is partly covered (the intake is open-loop, so closed-loop `goTo` is still untested)
+and step 5 has a test routine awaiting its on-robot run. Real routines need this season's
+field coordinates.
 
 ## Libraries
 
@@ -97,9 +108,15 @@ around it is ours to build. See the architecture doc.
 
 **Known bugs in Ivy 1.0.0** (verified in source — full list and mitigations in the
 architecture doc, §2.1):
-- `PedroCommands.follow/hold/turnTo` declare **no requirements**; always add
-  `.requiring(driveSubsystem)` or two paths will fight over the drivetrain.
+- `PedroCommands.follow/hold/turnTo` declare **no requirements** and **no `end()`**, so an
+  interrupted path keeps driving. Always go through `Drive`'s factories, never
+  `PedroCommands` directly.
+- `PedroCommands.turnTo` finishes after Pedro's 100 ms path-end timeout regardless of
+  heading, and `PedroCommands.hold` ignores the target pose's heading. `Drive.turnTo` /
+  `Drive.hold` are reimplemented on `holdPoint`.
 - `Command.proxy()` has an inverted `done()` condition — don't use it.
+- `Sequential` starts its next step one cycle after the previous one ends (it checks
+  `done()` before `execute()`); each nesting level of groups adds a cycle at boundaries.
 
 ## Architecture
 
@@ -144,8 +161,12 @@ Verify changes compile, then check the loop-timing telemetry on the hardware. Se
 
 ## Testing
 
-There is no automated test harness yet; today the robot is the test. This section records
-what was measured about the obstacles, because the shape of the harness follows from it.
+```bash
+./gradlew :TeamCode:testDebugUnitTest      # tiers 1 and 2, ~10 s, no robot needed
+```
+
+Tiers 1 and 2 below exist; tier 3 does not. This section records what was measured about the
+obstacles, because the shape of the harness follows from it.
 
 ### Why the FTC SDK resists unit testing
 
@@ -207,10 +228,15 @@ requirement/suspend/resume path, off the robot.
    collision: a stub sharing fully-qualified names with the real AARs must *replace* them on
    the test classpath, not sit alongside them.
 
-Open questions for whoever picks up the harness ticket: JUnit 4.13.2 and (if mocks are
-wanted) mockito-core 4.x, since the 5.x line requires Java 11 and this module is Java 8;
-`testOptions.unitTests.returnDefaultValues = true` in `build.common.gradle`; tests in
-`TeamCode/src/test/java`; and whether tier 3 is a stub SDK or Robolectric.
+How it is set up: JUnit 4.13.2, declared in `TeamCode/build.gradle` (not
+`build.common.gradle`, which stays upstream-pristine). No mocking framework —
+`sim/FakeMotor` fakes `DcMotorEx` with a `java.lang.reflect.Proxy`, and
+`returnDefaultValues` has not been needed. `SimLocalizer` integrates over **real** time
+because Pedro's PIDF derivative terms read the wall clock, so tier-2 tests take as long as
+the motion they simulate (a 24 in leg ≈ 1 s). The simulated drivetrain has no inertia: it
+proves routines terminate and hand the drivetrain over correctly, not that PIDF is tuned.
+When adding a subsystem, give it an `XTest` beside `IntakeTest` and a `FakeMotor` in
+`SimRobot`. Still open: whether tier 3 is a stub SDK or Robolectric.
 
 None of this replaces the loop-timing telemetry check on the hardware — a test can prove a
 routine terminates, but only the robot can tell you the loop held 6 ms.

@@ -15,6 +15,7 @@ import org.firstinspires.ftc.teamcode.util.Subsystem;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * The subsystem registry and the owner of the loop contract.
@@ -57,6 +58,7 @@ public class Robot {
     private final LoopTimer loopTimer = new LoopTimer();
 
     private TelemetryManager telemetry;
+    private Supplier<String> status;
     private long lastTelemetryNanos;
 
     /** The competition path: builds the Follower and puts every hub in MANUAL bulk caching. */
@@ -83,6 +85,12 @@ public class Robot {
         return this;
     }
 
+    /** An OpMode-level line (routine state, timings), shown inside the 10 Hz throttle. */
+    public Robot withStatus(Supplier<String> status) {
+        this.status = status;
+        return this;
+    }
+
     // --- phases ---
 
     public void startCycle() {
@@ -106,6 +114,7 @@ public class Robot {
         lastTelemetryNanos = now;
 
         telemetry.addLine(loopTimer.summary());
+        if (status != null) telemetry.addLine(status.get());
         for (int i = 0; i < subsystems.size(); i++) subsystems.get(i).telemetry(telemetry);
         telemetry.update();
     }
