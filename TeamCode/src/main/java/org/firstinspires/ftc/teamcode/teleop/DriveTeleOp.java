@@ -41,7 +41,7 @@ public class DriveTeleOp extends LinearOpMode {
         Command driverControl = robot.drive.teleopDrive(
                 () -> -gamepad1.left_stick_y,
                 () -> -gamepad1.left_stick_x,
-                () -> -gamepad1.right_stick_x,
+                () -> gamepad1.right_stick_x,
                 true);
         Command collect = robot.intake.collect();
         Command eject = robot.intake.eject();

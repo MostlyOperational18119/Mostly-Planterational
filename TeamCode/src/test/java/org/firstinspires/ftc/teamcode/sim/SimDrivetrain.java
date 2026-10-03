@@ -66,9 +66,9 @@ public final class SimDrivetrain extends Drivetrain {
 
     // --- for assertions ---
 
-    double vx() { return command[0] * MAX_SPEED; }
-    double vy() { return command[1] * MAX_SPEED; }
-    double omega() { return command[2] * MAX_TURN_RATE; }
+    public double vx() { return command[0] * MAX_SPEED; }
+    public double vy() { return command[1] * MAX_SPEED; }
+    public double omega() { return command[2] * MAX_TURN_RATE; }
 
     public boolean teleopStarted() { return teleop; }
 

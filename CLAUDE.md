@@ -22,8 +22,10 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── util/             Subsystem.java (the periodic hook Ivy lacks)
 │                     HubManager.java / LynxHubs.java (bulk-cache control)
 │                     LoopTimer.java, WriteGate.java, Timeouts.java, Fork.java
-├── pedroPathing/     Constants.java (FollowerConstants, PathConstraints, createFollower)
-│                     Tuning.java (Pedro's tuning OpModes)
+├── pedroPathing/     Constants.java (FollowerConstants, MecanumConstants, PathConstraints,
+│                     createFollower, LOCALIZER_INSTALLED)
+│                     StubLocalizer.java — fixed pose, for the chassis without odometry
+│                     Tuning.java (Pedro's tuning OpModes; refuses to run without a localizer)
 ├── routines/         TestRoutines.java — routine trees as static factories (§8.2)
 ├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
 │                     TestPaths.java — its PathChains, built at init
@@ -58,6 +60,12 @@ Declared in `build.dependencies.gradle` (Maven repo `https://mymaven.bylazar.com
 
 Path-following and localization library used for both autonomous and TeleOp driving.
 Configured in `pedroPathing/Constants.java`; tuning OpModes are in `pedroPathing/Tuning.java`.
+
+**Current chassis has no odometry.** Drive motors are `motorFL`/`motorFR`/`motorBL`/`motorBR`
+(Pedro `Mecanum`); the planned localizer is a goBILDA Pinpoint, not yet installed. Until it is,
+`Constants.LOCALIZER_INSTALLED = false` and the follower runs on `StubLocalizer`: robot-centric
+TeleOp works, while path following, `turnTo`/`hold`, autos and `Tuning` do not — the guarded
+ones refuse to start, because on a frozen pose a path drives at full power until a timeout.
 
 Docs: <https://pedropathing.com/docs>
 

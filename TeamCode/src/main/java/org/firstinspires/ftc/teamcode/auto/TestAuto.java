@@ -9,6 +9,7 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
 import org.firstinspires.ftc.teamcode.Robot;
+import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.routines.TestRoutines;
 import org.firstinspires.ftc.teamcode.util.Timeouts;
 
@@ -32,6 +33,15 @@ public class TestAuto extends LinearOpMode {
     @Override
     public void runOpMode() {
         Scheduler.reset();                      // MANDATORY — the Scheduler's state is static
+
+        if (!Constants.LOCALIZER_INSTALLED) {
+            // On StubLocalizer the pose never moves, so each leg would drive at full power until
+            // its 5 s timeout. Refuse rather than crash, so the reason is on the Driver Station.
+            telemetry.addLine("Disabled: no localizer installed (Constants.LOCALIZER_INSTALLED).");
+            telemetry.update();
+            waitForStart();
+            return;
+        }
 
         Robot robot = Robot.fromHardwareMap(hardwareMap)
                 .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry())
