@@ -35,7 +35,7 @@ public class Intake implements Subsystem {
     /** Flip this, not the power signs, if the intake runs backwards. */
     private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.REVERSE;
 
-    public static final double COLLECT_POWER = 1.0;
+    public static final double COLLECT_POWER = 0.7;
     public static final double EJECT_POWER = -0.6;
 
     private final DcMotorEx motor;
