@@ -11,7 +11,10 @@ import org.firstinspires.ftc.teamcode.Robot;
 import org.firstinspires.ftc.teamcode.sim.FakeMotor;
 import org.firstinspires.ftc.teamcode.sim.SimDrivetrain;
 import org.firstinspires.ftc.teamcode.subsystems.Intake;
+import org.firstinspires.ftc.teamcode.subsystems.Outtake;
+import org.firstinspires.ftc.teamcode.subsystems.Vision;
 import org.firstinspires.ftc.teamcode.util.HubManager;
+import org.firstinspires.ftc.teamcode.vision.VisionSource;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -27,7 +30,8 @@ public class StubLocalizerTest {
         Scheduler.reset();
         Follower follower = new Follower(Constants.followerConstants, new StubLocalizer(),
                 drivetrain, Constants.pathConstraints);
-        robot = new Robot(HubManager.NONE, follower, new Intake(new FakeMotor().motor));
+        robot = new Robot(HubManager.NONE, follower, new Intake(new FakeMotor().motor),
+                new Outtake(new FakeMotor().motor), new Vision(VisionSource.NONE));
         follower.setStartingPose(new Pose());
         follower.update();
         robot.drive.teleopDrive(() -> forward, () -> strafe, () -> turn, true).schedule();

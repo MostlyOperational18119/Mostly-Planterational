@@ -7,6 +7,8 @@ import com.pedropathing.ivy.Scheduler;
 import org.firstinspires.ftc.teamcode.Robot;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.Intake;
+import org.firstinspires.ftc.teamcode.subsystems.Outtake;
+import org.firstinspires.ftc.teamcode.subsystems.Vision;
 import org.firstinspires.ftc.teamcode.util.HubManager;
 
 import java.util.concurrent.locks.LockSupport;
@@ -27,6 +29,8 @@ public final class SimRobot {
     public final SimDrivetrain drivetrain = new SimDrivetrain();
     public final SimLocalizer localizer = new SimLocalizer(drivetrain);
     public final FakeMotor intakeMotor = new FakeMotor();
+    public final FakeMotor outtakeMotor = new FakeMotor();
+    public final FakeVisionSource camera = new FakeVisionSource();
     public final Follower follower;
     public final Robot robot;
 
@@ -34,7 +38,8 @@ public final class SimRobot {
         Scheduler.reset();
         follower = new Follower(Constants.followerConstants, localizer, drivetrain,
                 Constants.pathConstraints);
-        robot = new Robot(HubManager.NONE, follower, new Intake(intakeMotor.motor));
+        robot = new Robot(HubManager.NONE, follower, new Intake(intakeMotor.motor),
+                new Outtake(outtakeMotor.motor), new Vision(camera));
         follower.setStartingPose(start);
         follower.update();                  // as the OpModes do between init and the loop
     }

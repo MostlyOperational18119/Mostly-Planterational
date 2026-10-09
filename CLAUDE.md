@@ -19,9 +19,18 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     execute/write/telemetry). OpModes call robot.cycle().
 ├── subsystems/       Drive.java — Pedro Follower wrapped as a requirable subsystem
 │                     Intake.java — one open-loop motor ("intake"), collect/eject/off
+│                     Outtake.java — open-loop flywheel ("outtake"), spin/off
+│                     Vision.java — HIVE CELL clusters relative to the robot; which CELL is up
+├── vision/           VisionSource (interface) / LimelightSource (the only Limelight3A user)
+│                     VisionSample — LLResult reduced to per-tag robot-frame positions
+│                     ClusterFit — cluster centre from 2–4 of its tags; CellSighting
+│                     FieldFrame — FTC field frame (m, centre) ↔ Pedro (in, corner)
+├── field/            Cell.java — the four HIVE CELLS and their tag IDs (manual §9.9)
+│                     Alliance.java
 ├── util/             Subsystem.java (the periodic hook Ivy lacks)
 │                     HubManager.java / LynxHubs.java (bulk-cache control)
 │                     LoopTimer.java, WriteGate.java, Timeouts.java, Fork.java
+│                     Aim.java — bearing / turn / distance to a goal, pure math
 ├── pedroPathing/     Constants.java (FollowerConstants, MecanumConstants, PathConstraints,
 │                     createFollower, LOCALIZER_INSTALLED)
 │                     StubLocalizer.java — fixed pose, for the chassis without odometry
@@ -34,13 +43,15 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 
 TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 ├── sim/              SimRobot (real Robot + Follower over fakes), SimDrivetrain,
-│                     SimLocalizer, FakeMotor
-├── util/             tier 1: WriteGate, LoopTimer, Timeouts
-├── subsystems/       tier 2: IntakeTest, DriveTest
+│                     SimLocalizer, FakeMotor, FakeVisionSource
+├── util/             tier 1: WriteGate, LoopTimer, Timeouts, Aim
+├── vision/           tier 1: FieldFrame, ClusterFit
+├── field/            tier 1: CellTest (tag IDs against the manual)
+├── subsystems/       tier 2: IntakeTest, OuttakeTest, DriveTest, VisionTest
 └── routines/         tier 2: TestRoutinesTest
 ```
 
-`Drive` and `Intake` exist so far. Of the architecture doc's implementation order (§10),
+`Drive`, `Intake`, `Outtake` and `Vision` exist so far. Of the architecture doc's implementation order (§10),
 step 3 is partly covered (the intake is open-loop, so closed-loop `goTo` is still untested)
 and step 5 has a test routine awaiting its on-robot run. Real routines need this season's
 field coordinates.
@@ -86,8 +97,25 @@ Two things matter when writing code against it (both verified in the SDK 12.0 so
   **15-second** read timeout. On the control thread that is a worse stall than anything in
   last season's code. Init-time only, or a dedicated background thread. See architecture §7.3.
 
-Prefer MegaTag1 (`getBotpose()` gated on `getBotposeTagCount() >= 2`); MegaTag2 only with an
-off-thread yaw pusher.
+**BIOBUZZ: no botpose (MegaTag1 or 2).** Every tag (IDs 30–45) is on a HIVE CELL, and each
+HIVE is a seesaw that tips ±30° during the match (manual §9.6, §9.9). A field-map solve is
+only right while every HIVE sits as the map assumes, and there are no fixed tags to fall back
+on. So `LimelightSource` passes each tag's **robot-relative** position
+(`getTargetPoseRobotSpace()`), `ClusterFit` fits a CELL's row of four tags (offsets ±2.75,
+±6.5 in) into a cluster centre from ≥ 2 of them, and `Vision` exposes per-CELL
+`CellSighting`s (bearing, floor distance, height) plus `upCell(alliance)` — the CELL to
+launch into. Both CELLS' clusters face down in either state; the up one is ~15 in higher,
+so height decides (`UP_CELL_MIN_HEIGHT_IN`, derived from the manual's drawings). Age is
+measured from the shutter (`parsedAt − capture − targeting latency`). Vision does **not**
+localize the robot; field pose comes from the Pinpoint alone.
+
+Camera-side setup the code assumes: an AprilTag pipeline at index 0 (36h11, full 3D, tag
+size 82.55 mm), and the camera's mounting entered in the Limelight UI so robot-space z is
+height above the floor. The camera must look **up** at the CELL undersides (clusters at
+roughly 34 and 49 in). **Unverified on hardware:** the Limelight robot-space y sign
+(`LimelightSource.LEFT_SIGN`) and the up-CELL height threshold — check both against a tape
+measure on a real HIVE. `FieldFrame` copies Pedro's `FTCCoordinates.convertToPedro` (whose
+inverse in 2.1.2 is wrong) and is also unverified.
 
 Docs: <https://docs.limelightvision.io/> ·
 [FTC setup](https://docs.limelightvision.io/docs/docs-limelight/getting-started/ftc)
@@ -196,7 +224,8 @@ OpMode base class.** Everything else our code is built from already runs headles
 
 These are deliberate choices in the shell, not accidents — keep them when adding subsystems:
 
-1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower, Intake)` —
+1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower, Intake, Outtake,
+   Vision)` —
    one parameter per hardware-backed subsystem — with
    `Robot.fromHardwareMap(hw)` as the competition path. A `HardwareMap` never reaches
    anything below that factory.
@@ -205,7 +234,9 @@ These are deliberate choices in the shell, not accidents — keep them when addi
    interface, so the constructor-injected form is testable and the factory is the only
    untestable line.
 3. **Bulk caching sits behind `HubManager`**, so `LynxModule` is confined to `LynxHubs`;
-   tests pass `HubManager.NONE`.
+   tests pass `HubManager.NONE`. Likewise `Limelight3A`/`LLResult` (built on Android's
+   `org.json`, a stub on the JVM) are confined to `LimelightSource` behind `VisionSource`;
+   tests pass `VisionSource.NONE` or a `FakeVisionSource`.
 4. **The loop lives in `Robot.cycle()`, not in the OpMode.** OpModes are ~20 lines of glue.
    Anything that can call `cycle()` in a `for` loop can run the robot.
 5. **Pure logic has zero SDK imports** — `LoopTimer` (clock injectable), `WriteGate`,
@@ -253,6 +284,6 @@ routine terminates, but only the robot can tell you the loop held 6 ms.
 
 - OpModes are annotated `@Autonomous` / `@TeleOp` with an explicit `name` and `group`.
 - Package by role: `subsystems/`, `commands/`, `routines/`, `auto/`, `teleop/`,
-  `pedroPathing/`, `util/`.
+  `pedroPathing/`, `vision/`, `field/`, `util/`.
 - Field-unit convention follows Pedro (inches, radians) — heading in **radians** at API
   boundaries; convert only for display.

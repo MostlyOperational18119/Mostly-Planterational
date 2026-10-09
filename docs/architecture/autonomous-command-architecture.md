@@ -535,6 +535,12 @@ where the robot *will* be one cycle from now, cancelling the last 6 ms of latenc
 
 ## 7. Vision — the Limelight 3A does the seeing
 
+> **BIOBUZZ (2026–27) supersedes the localization parts of this section.** Every AprilTag is
+> on a HIVE CELL that tips during the match, so MegaTag botpose (§7.2–7.3) and pose fusion
+> (§7.4) do not apply: vision measures the CELLS *relative to the robot* instead. The driver
+> facts (§7.1), the blocking-call hazard (§7.3 table) and the timestamp domain (§7.4) still
+> hold. See CLAUDE.md → Limelight 3A for what is built.
+
 **Vision does not run on the Control Hub.** We use a **Limelight 3A** smart camera: it carries
 its own processor, runs the AprilTag / neural pipeline on-board, and hands the Control Hub a
 finished answer over Ethernet-over-USB. The 10–30 ms of frame processing that would otherwise

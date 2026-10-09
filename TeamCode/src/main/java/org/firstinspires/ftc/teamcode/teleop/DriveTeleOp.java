@@ -23,6 +23,7 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
  * — no mode flags, no state machine.
  *
  * <p>Intake: hold right bumper to collect, left bumper to eject (eject wins if both are held).
+ * Outtake: Y toggles the flywheel.
  */
 @TeleOp(name = "Drive (Command)", group = "BIOBUZZ")
 public class DriveTeleOp extends LinearOpMode {
@@ -45,6 +46,7 @@ public class DriveTeleOp extends LinearOpMode {
                 true);
         Command collect = robot.intake.collect();
         Command eject = robot.intake.eject();
+        Command spin = robot.outtake.spin();
 
         while (opModeInInit()) {
             robot.initCycle();
@@ -62,11 +64,18 @@ public class DriveTeleOp extends LinearOpMode {
             // of eject while still holding collect drops straight back into collecting.
             whileHeld(eject, gamepad1.left_bumper);
             whileHeld(collect, gamepad1.right_bumper && !gamepad1.left_bumper);
+            if (gamepad1.yWasPressed()) toggle(spin);
             robot.cycle();
         }
 
         Scheduler.reset();
         robot.stop();
+    }
+
+    /** Edge-triggered binding: each press flips {@code command} between scheduled and not. */
+    private static void toggle(Command command) {
+        if (command.isScheduled()) command.cancel();
+        else command.schedule();
     }
 
     /** Level-triggered binding: {@code command} is scheduled exactly while {@code held}. */
