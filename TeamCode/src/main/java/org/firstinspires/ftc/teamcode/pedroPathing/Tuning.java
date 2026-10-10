@@ -91,6 +91,12 @@ public class Tuning extends SelectableOpMode {
 
     @Override
     public void onSelect() {
+        // Every tuner reads the pose; on StubLocalizer the automatic ones would drive at full
+        // power forever. BIOBUZZ guard — see Constants.LOCALIZER_INSTALLED.
+        if (!Constants.LOCALIZER_INSTALLED) {
+            throw new IllegalStateException(
+                    "No localizer installed: Pedro tuning is disabled. See Constants.LOCALIZER_INSTALLED.");
+        }
         if (follower == null) {
             follower = Constants.createFollower(hardwareMap);
             PanelsConfigurables.INSTANCE.refreshClass(this);
