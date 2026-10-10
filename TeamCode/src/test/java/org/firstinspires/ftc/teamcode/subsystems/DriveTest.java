@@ -11,6 +11,7 @@ import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.paths.PathChain;
 
 import org.firstinspires.ftc.teamcode.sim.SimRobot;
+import org.firstinspires.ftc.teamcode.util.AimController;
 import org.firstinspires.ftc.teamcode.util.Timeouts;
 import org.junit.Before;
 import org.junit.Test;
@@ -106,6 +107,54 @@ public class DriveTest {
         assertTrue(sim.cycleUntil(() -> !hold.isScheduled(), 4000));
         assertEquals(Math.PI / 2, sim.pose().getHeading(), Math.toRadians(2.5));
         assertTrue(sim.pose().distanceFrom(target) < 1.0);
+    }
+
+    /** A perfect camera: the error to a fixed field point, from the simulated pose. */
+    private double aimErrorTo(double targetX, double targetY) {
+        Pose p = sim.pose();
+        double dx = targetX - p.getX(), dy = targetY - p.getY();
+        double h = p.getHeading();
+        double x = dx * Math.cos(h) + dy * Math.sin(h);     // into the robot frame
+        double y = -dx * Math.sin(h) + dy * Math.cos(h);
+        return AimController.error(x, y);
+    }
+
+    @Test
+    public void aimingTurnsTheRobotOntoTheTargetFromEitherSide() {
+        for (double targetY : new double[] {40, -40}) {
+            setUp();
+            Command aim = drive.aimedTeleopDrive(() -> 0, () -> 0, () -> 0,
+                    () -> aimErrorTo(60, targetY));
+            aim.schedule();
+            assertTrue("never settled on target at y=" + targetY, sim.cycleUntil(() ->
+                    AimController.onTarget(aimErrorTo(60, targetY)), 4000));
+            sim.cycles(50);
+            assertTrue("drifted off target at y=" + targetY,
+                    AimController.onTarget(aimErrorTo(60, targetY)));
+            assertEquals("aiming must not translate", 0, sim.pose().getX(), 0.5);
+        }
+    }
+
+    @Test
+    public void withNoTargetTheDriversTurnStickApplies() {
+        Command aim = drive.aimedTeleopDrive(() -> 0, () -> 0, () -> 0.5, () -> Double.NaN);
+        aim.schedule();
+        sim.cycles(30);
+        assertTrue("manual turn should rotate CCW", sim.pose().getHeading() > 0.1);
+    }
+
+    @Test
+    public void releasingAimResumesPlainDriverControl() {
+        Command driver = drive.teleopDrive(() -> 0.3, () -> 0, () -> 0, true);
+        driver.schedule();
+        sim.cycles(3);
+        Command aim = drive.aimedTeleopDrive(() -> 0, () -> 0, () -> 0, () -> 0.0);
+        aim.schedule();
+        sim.cycle();
+        assertFalse(Scheduler.isRunning(driver));
+        aim.cancel();
+        sim.cycles(2);
+        assertTrue(Scheduler.isRunning(driver));
     }
 
     @Test

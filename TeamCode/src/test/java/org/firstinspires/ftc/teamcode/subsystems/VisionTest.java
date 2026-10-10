@@ -109,6 +109,26 @@ public class VisionTest {
     }
 
     @Test
+    public void aimErrorPointsAtTheUpCell() {
+        camera.sample = fresh()
+                .cluster(Cell.RED_FAR, 60, 20, DOWN)
+                .cluster(Cell.RED_AUDIENCE, 60, -20, UP)
+                .build();
+        vision.read();
+        assertEquals(Math.atan2(-20, 60), vision.aimError(Alliance.RED), 1e-9);
+        assertTrue("blue HIVE not in view", Double.isNaN(vision.aimError(Alliance.BLUE)));
+    }
+
+    @Test
+    public void aimErrorIsNaNWhenTheUpCellIsOnlyInferred() {
+        // Only the down CELL in view: we know its partner is up, but not where it is.
+        camera.sample = fresh().cluster(Cell.RED_FAR, 60, 20, DOWN).build();
+        vision.read();
+        assertSame(Cell.RED_AUDIENCE, vision.upCell(Alliance.RED));
+        assertTrue(Double.isNaN(vision.aimError(Alliance.RED)));
+    }
+
+    @Test
     public void offlineCameraHasNoFix() {
         camera.online = false;
         camera.sample = fresh().cluster(Cell.RED_FAR, 60, 0, UP).build();

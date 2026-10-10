@@ -8,6 +8,8 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.Robot;
+import org.firstinspires.ftc.teamcode.field.Alliance;
+import org.firstinspires.ftc.teamcode.util.AimController;
 import org.firstinspires.ftc.teamcode.util.Timeouts;
 
 /**
@@ -24,11 +26,18 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
  *
  * <p>Intake: hold right bumper to collect, left bumper to eject (eject wins if both are held).
  * Outtake: Y toggles the flywheel.
+ *
+ * <p>Aim: hold the right trigger to turn the robot onto your alliance's up CELL — there is no
+ * turret, so the chassis aims the flywheel. The left stick still translates; with no target in
+ * view the right stick turns as normal. Choose the alliance during init (X blue, B red); until
+ * one is chosen, aiming does nothing.
  */
 @TeleOp(name = "Drive (Command)", group = "BIOBUZZ")
 public class DriveTeleOp extends LinearOpMode {
 
     private static final double SNAP_TIMEOUT_MS = 1500;
+
+    private Alliance alliance;
 
     @Override
     public void runOpMode() {
@@ -36,6 +45,7 @@ public class DriveTeleOp extends LinearOpMode {
 
         Robot robot = Robot.fromHardwareMap(hardwareMap)
                 .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry());
+        robot.withStatus(() -> status(robot));
         robot.follower.setStartingPose(new Pose());
 
         // Built once, before the match: it reads the gamepad through suppliers each cycle.
@@ -47,8 +57,15 @@ public class DriveTeleOp extends LinearOpMode {
         Command collect = robot.intake.collect();
         Command eject = robot.intake.eject();
         Command spin = robot.outtake.spin();
+        Command aim = robot.drive.aimedTeleopDrive(
+                () -> -gamepad1.left_stick_y,
+                () -> -gamepad1.left_stick_x,
+                () -> -gamepad1.right_stick_x,
+                () -> aimError(robot));
 
         while (opModeInInit()) {
+            if (gamepad1.x) alliance = Alliance.BLUE;
+            if (gamepad1.b) alliance = Alliance.RED;
             robot.initCycle();
         }
 
@@ -65,11 +82,26 @@ public class DriveTeleOp extends LinearOpMode {
             whileHeld(eject, gamepad1.left_bumper);
             whileHeld(collect, gamepad1.right_bumper && !gamepad1.left_bumper);
             if (gamepad1.yWasPressed()) toggle(spin);
+            // Same requirement as driverControl: holding suspends it, releasing resumes it.
+            whileHeld(aim, gamepad1.right_trigger > 0.5);
             robot.cycle();
         }
 
         Scheduler.reset();
         robot.stop();
+    }
+
+    private double aimError(Robot robot) {
+        return alliance == null ? Double.NaN : robot.vision.aimError(alliance);
+    }
+
+    private String status(Robot robot) {
+        if (alliance == null) return "alliance: NOT SET (X blue, B red) — aiming disabled";
+        double error = aimError(robot);
+        String aim = Double.isNaN(error) ? "no target"
+                : AimController.onTarget(error) ? "ON TARGET"
+                : String.format("turn %+.1f°", Math.toDegrees(error));
+        return "alliance: " + alliance + " | aim: " + aim;
     }
 
     /** Edge-triggered binding: each press flips {@code command} between scheduled and not. */

@@ -13,6 +13,7 @@ import com.pedropathing.ivy.pedro.PedroCommands;
 import com.pedropathing.math.MathFunctions;
 import com.pedropathing.paths.PathChain;
 
+import org.firstinspires.ftc.teamcode.util.AimController;
 import org.firstinspires.ftc.teamcode.util.Subsystem;
 
 import java.util.function.DoubleSupplier;
@@ -210,6 +211,26 @@ public class Drive implements Subsystem {
      */
     public CommandBuilder waitForT(double t) {
         return Commands.waitUntil(() -> follower.getCurrentTValue() >= t);
+    }
+
+    /**
+     * Driver control with the turn taken over by aiming: forward and strafe stay with the
+     * driver, rotation servos {@code aimError} to zero through {@link AimController}. While
+     * {@code aimError} is NaN (no target in view) the driver's {@code manualTurn} applies, so
+     * losing the target never locks the driver out.
+     *
+     * <p>Robot-centric, and needs no odometry — it closes the loop on the vision measurement
+     * itself. Same requirement and {@code SUSPEND} behaviour as {@link #teleopDrive}, so
+     * scheduling it suspends plain driver control and cancelling it resumes that.
+     *
+     * @param aimError radians to turn, CCW positive, NaN when there is nothing to aim at
+     */
+    public CommandBuilder aimedTeleopDrive(DoubleSupplier forward, DoubleSupplier strafe,
+                                           DoubleSupplier manualTurn, DoubleSupplier aimError) {
+        return teleopDrive(forward, strafe, () -> {
+            double turn = AimController.turn(aimError.getAsDouble());
+            return Double.isNaN(turn) ? manualTurn.getAsDouble() : turn;
+        }, true);
     }
 
     /**

@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.field.Alliance;
 import org.firstinspires.ftc.teamcode.field.Cell;
+import org.firstinspires.ftc.teamcode.util.AimController;
 import org.firstinspires.ftc.teamcode.util.Subsystem;
 import org.firstinspires.ftc.teamcode.vision.CellSighting;
 import org.firstinspires.ftc.teamcode.vision.ClusterFit;
@@ -178,6 +179,17 @@ public class Vision implements Subsystem {
         CellSighting one = far != null ? far : audience;
         if (one == null) return null;
         return one.z >= UP_CELL_MIN_HEIGHT_IN ? one.cell : one.cell.partner();
+    }
+
+    /**
+     * How far the robot must turn to aim the launcher at {@code alliance}'s up CELL, radians,
+     * CCW positive; NaN when that CELL is not in view. Aims at the cluster centre under the
+     * CELL — the opening is offset a few inches from it.
+     */
+    public double aimError(Alliance alliance) {
+        Cell up = upCell(alliance);
+        CellSighting target = up == null ? null : sighting(up);
+        return target == null ? Double.NaN : AimController.error(target.x, target.y);
     }
 
     /** Wall-clock ms when the frame behind this cycle's sightings was captured (§7.4). */

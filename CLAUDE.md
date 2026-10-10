@@ -31,6 +31,7 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     HubManager.java / LynxHubs.java (bulk-cache control)
 │                     LoopTimer.java, WriteGate.java, Timeouts.java, Fork.java
 │                     Aim.java — bearing / turn / distance to a goal, pure math
+│                     AimController.java — chassis aim law (P + kS, capped), Panels-tunable
 ├── pedroPathing/     Constants.java (FollowerConstants, MecanumConstants, PathConstraints,
 │                     createFollower, LOCALIZER_INSTALLED)
 │                     StubLocalizer.java — fixed pose, for the chassis without odometry
@@ -38,13 +39,13 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── routines/         TestRoutines.java — routine trees as static factories (§8.2)
 ├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
 │                     TestPaths.java — its PathChains, built at init
-└── teleop/           DriveTeleOp.java — driver control on the loop contract
+└── teleop/           DriveTeleOp.java — driver control on the loop contract; hold-to-aim
                       CommandTeleOpDemo.java — upstream Ivy + Pedro reference, not an OpMode
 
 TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 ├── sim/              SimRobot (real Robot + Follower over fakes), SimDrivetrain,
 │                     SimLocalizer, FakeMotor, FakeVisionSource
-├── util/             tier 1: WriteGate, LoopTimer, Timeouts, Aim
+├── util/             tier 1: WriteGate, LoopTimer, Timeouts, Aim, AimController
 ├── vision/           tier 1: FieldFrame, ClusterFit
 ├── field/            tier 1: CellTest (tag IDs against the manual)
 ├── subsystems/       tier 2: IntakeTest, OuttakeTest, DriveTest, VisionTest
@@ -108,6 +109,18 @@ launch into. Both CELLS' clusters face down in either state; the up one is ~15 i
 so height decides (`UP_CELL_MIN_HEIGHT_IN`, derived from the manual's drawings). Age is
 measured from the shutter (`parsedAt − capture − targeting latency`). Vision does **not**
 localize the robot; field pose comes from the Pinpoint alone.
+
+**Aiming turns the whole robot — there is no turret.** The flywheel is fixed to the chassis.
+`Vision.aimError(alliance)` is the turn (radians, CCW +) that puts the launcher's line of fire
+through the alliance's up CELL; `Drive.aimedTeleopDrive` servos it to zero through
+`AimController` while the driver keeps translation, falling back to the turn stick when the
+target is out of view. It closes the loop on the vision measurement, so it needs no
+odometry. In `DriveTeleOp`: alliance chosen in init (X blue, B red), right trigger held to
+aim. The flywheel fires straight forward from the robot's centreline (confirmed from the
+CAD: `AimController.LAUNCH_DIRECTION = 0`, `LAUNCHER_LEFT_OFFSET_IN = 0`), so aiming points
+robot forward at the target. The gains are untuned starting points, live-editable in
+Panels. Vision lag (~30–50 ms) limits the gains until the Pinpoint allows subtracting the
+heading change since capture.
 
 Camera-side setup the code assumes: an AprilTag pipeline at index 0 (36h11, full 3D, tag
 size 82.55 mm), and the camera's mounting entered in the Limelight UI so robot-space z is
