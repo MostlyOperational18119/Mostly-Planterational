@@ -19,6 +19,8 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     execute/write/telemetry). OpModes call robot.cycle().
 ├── subsystems/       Drive.java — Pedro Follower wrapped as a requirable subsystem
 │                     Intake.java — one open-loop motor ("intake"), collect/eject/off
+│                     Transfer.java — open-loop motor ("transfer") lifting pollen into the
+│                     flywheel, feed/reverse/off
 │                     Outtake.java — open-loop flywheel ("outtake"), spin/off
 │                     Vision.java — HIVE CELL clusters relative to the robot; which CELL is up
 ├── vision/           VisionSource (interface) / LimelightSource (the only Limelight3A user)
@@ -48,11 +50,11 @@ TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 ├── util/             tier 1: WriteGate, LoopTimer, Timeouts, Aim, AimController
 ├── vision/           tier 1: FieldFrame, ClusterFit
 ├── field/            tier 1: CellTest (tag IDs against the manual)
-├── subsystems/       tier 2: IntakeTest, OuttakeTest, DriveTest, VisionTest
+├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest
 └── routines/         tier 2: TestRoutinesTest
 ```
 
-`Drive`, `Intake`, `Outtake` and `Vision` exist so far. Of the architecture doc's implementation order (§10),
+`Drive`, `Intake`, `Transfer`, `Outtake` and `Vision` exist so far. Of the architecture doc's implementation order (§10),
 step 3 is partly covered (the intake is open-loop, so closed-loop `goTo` is still untested)
 and step 5 has a test routine awaiting its on-robot run. Real routines need this season's
 field coordinates.
@@ -237,8 +239,8 @@ OpMode base class.** Everything else our code is built from already runs headles
 
 These are deliberate choices in the shell, not accidents — keep them when adding subsystems:
 
-1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower, Intake, Outtake,
-   Vision)` —
+1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower, Intake, Transfer,
+   Outtake, Vision)` —
    one parameter per hardware-backed subsystem — with
    `Robot.fromHardwareMap(hw)` as the competition path. A `HardwareMap` never reaches
    anything below that factory.

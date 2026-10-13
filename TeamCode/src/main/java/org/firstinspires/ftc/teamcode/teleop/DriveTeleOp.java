@@ -4,6 +4,7 @@ import com.bylazar.telemetry.PanelsTelemetry;
 import com.pedropathing.geometry.Pose;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
+import com.pedropathing.ivy.groups.Groups;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
@@ -25,7 +26,8 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
  * — no mode flags, no state machine.
  *
  * <p>Intake: hold right bumper to collect, left bumper to eject (eject wins if both are held).
- * Outtake: Y toggles the flywheel.
+ * Launch: Y toggles the flywheel and the transfer together, so the transfer carries pollen
+ * straight up into the spinning flywheel.
  *
  * <p>Aim: hold the right trigger to turn the robot onto your alliance's up CELL — there is no
  * turret, so the chassis aims the flywheel. The left stick still translates; with no target in
@@ -56,7 +58,8 @@ public class DriveTeleOp extends LinearOpMode {
                 true);
         Command collect = robot.intake.collect();
         Command eject = robot.intake.eject();
-        Command spin = robot.outtake.spin();
+        // One command over both requirements: toggling it starts and stops them together.
+        Command launch = Groups.parallel(robot.outtake.spin(), robot.transfer.feed());
         Command aim = robot.drive.aimedTeleopDrive(
                 () -> -gamepad1.left_stick_y,
                 () -> -gamepad1.left_stick_x,
@@ -81,7 +84,7 @@ public class DriveTeleOp extends LinearOpMode {
             // of eject while still holding collect drops straight back into collecting.
             whileHeld(eject, gamepad1.left_bumper);
             whileHeld(collect, gamepad1.right_bumper && !gamepad1.left_bumper);
-            if (gamepad1.yWasPressed()) toggle(spin);
+            if (gamepad1.yWasPressed()) toggle(launch);
             // Same requirement as driverControl: holding suspends it, releasing resumes it.
             whileHeld(aim, gamepad1.right_trigger > 0.5);
             robot.cycle();

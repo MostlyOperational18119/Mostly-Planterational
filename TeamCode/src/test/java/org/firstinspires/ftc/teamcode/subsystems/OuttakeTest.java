@@ -47,7 +47,7 @@ public class OuttakeTest {
 
     @Test
     public void togglingTwiceTurnsItBackOff() {
-        // What DriveTeleOp's Y binding does: schedule if idle, cancel if running.
+        // The toggle DriveTeleOp's Y binding uses: schedule if idle, cancel if running.
         Command spin = outtake.spin();
         spin.schedule();
         cycle();
