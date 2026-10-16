@@ -1,16 +1,19 @@
 package org.firstinspires.ftc.teamcode;
 
+import com.bylazar.configurables.annotations.Configurable;
 import com.bylazar.telemetry.TelemetryManager;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.ivy.Scheduler;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.teamcode.field.Alliance;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.Drive;
 import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.subsystems.Outtake;
 import org.firstinspires.ftc.teamcode.subsystems.Transfer;
 import org.firstinspires.ftc.teamcode.subsystems.Vision;
+import org.firstinspires.ftc.teamcode.util.HeadingHistory;
 import org.firstinspires.ftc.teamcode.util.HubManager;
 import org.firstinspires.ftc.teamcode.util.LoopTimer;
 import org.firstinspires.ftc.teamcode.util.LynxHubs;
@@ -47,10 +50,22 @@ import java.util.function.Supplier;
  * solution computed from the pose in phase 4 uses a pose refreshed this cycle, not last cycle,
  * and Pedro's path callbacks fire before the scheduler, so a command scheduled by a callback
  * starts on the same iteration.
+ *
+ * <p>Right after {@code follower.update()} the heading is recorded in a {@link HeadingHistory},
+ * which is what lets {@link #aimError(Alliance)} correct a vision measurement for the robot's
+ * turn since the frame was captured.
  */
+@Configurable
 public class Robot {
 
     private static final long TELEMETRY_PERIOD_NANOS = 100_000_000L;   // 10 Hz
+
+    /**
+     * Adds a per-phase timing line (median / max of read, update, execute, write) to telemetry,
+     * so a regression in {@code max} is attributable in one run (architecture doc §9). The
+     * timing itself is always taken — a few {@code nanoTime()} calls — only the line is gated.
+     */
+    public static boolean DEBUG_TIMING = false;
 
     public final Follower follower;
     public final Drive drive;
@@ -62,6 +77,11 @@ public class Robot {
     private final HubManager hubs;
     private final List<Subsystem> subsystems;
     private final LoopTimer loopTimer = new LoopTimer();
+    private final LoopTimer readTimer = new LoopTimer();
+    private final LoopTimer updateTimer = new LoopTimer();
+    private final LoopTimer executeTimer = new LoopTimer();
+    private final LoopTimer writeTimer = new LoopTimer();
+    private final HeadingHistory headings = new HeadingHistory();
 
     private TelemetryManager telemetry;
     private Supplier<String> status;
@@ -126,6 +146,7 @@ public class Robot {
         lastTelemetryNanos = now;
 
         telemetry.addLine(loopTimer.summary());
+        if (DEBUG_TIMING) telemetry.addLine(phaseSummary());
         if (status != null) telemetry.addLine(status.get());
         for (int i = 0; i < subsystems.size(); i++) subsystems.get(i).telemetry(telemetry);
         telemetry.update();
@@ -136,11 +157,21 @@ public class Robot {
     /** One full iteration. The only thing an OpMode's main loop should need to call. */
     public void cycle() {
         loopTimer.tick();
+        long t0 = System.nanoTime();
         startCycle();
         read();
+        long t1 = System.nanoTime();
         follower.update();
+        headings.record(System.currentTimeMillis(), follower.getPose().getHeading());
+        long t2 = System.nanoTime();
         Scheduler.execute();
+        long t3 = System.nanoTime();
         write();
+        long t4 = System.nanoTime();
+        readTimer.record(t1 - t0);
+        updateTimer.record(t2 - t1);
+        executeTimer.record(t3 - t2);
+        writeTimer.record(t4 - t3);
         telemetry();
     }
 
@@ -163,5 +194,33 @@ public class Robot {
 
     public LoopTimer loopTimer() {
         return loopTimer;
+    }
+
+    /** {@code phases med/max ms: read 0.3/0.5 update 0.6/1.1 execute 0.1/0.2 write 0.4/2.1} */
+    public String phaseSummary() {
+        return String.format("phases med/max ms: read %.1f/%.1f update %.1f/%.1f "
+                        + "execute %.1f/%.1f write %.1f/%.1f",
+                readTimer.medianMs(), readTimer.maxMs(), updateTimer.medianMs(), updateTimer.maxMs(),
+                executeTimer.medianMs(), executeTimer.maxMs(), writeTimer.medianMs(), writeTimer.maxMs());
+    }
+
+    // --- cross-subsystem queries: safe in phase 4 ---
+
+    /**
+     * {@link Vision#aimError(Alliance)}, brought forward from when the frame was captured to
+     * now: minus however far the robot has turned since (architecture doc §7.4). Radians, CCW
+     * positive; NaN with no target.
+     *
+     * <p>Here rather than in {@code Vision} because it needs the follower's heading, and
+     * subsystems do not know about each other. On {@code StubLocalizer} the heading never
+     * changes, so this equals the raw measurement until the Pinpoint is in.
+     */
+    public double aimError(Alliance alliance) {
+        double measured = vision.aimError(alliance);
+        if (Double.isNaN(measured)) return measured;
+        double atCapture = headings.headingAt(vision.captureTimeMs());
+        if (Double.isNaN(atCapture)) return measured;
+        double turnedSince = HeadingHistory.wrap(follower.getPose().getHeading() - atCapture);
+        return HeadingHistory.wrap(measured - turnedSince);
     }
 }

@@ -95,7 +95,7 @@ public class DriveTeleOp extends LinearOpMode {
     }
 
     private double aimError(Robot robot) {
-        return alliance == null ? Double.NaN : robot.vision.aimError(alliance);
+        return alliance == null ? Double.NaN : robot.aimError(alliance);
     }
 
     private String status(Robot robot) {

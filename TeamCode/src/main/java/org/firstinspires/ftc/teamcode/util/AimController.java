@@ -12,8 +12,9 @@ import com.bylazar.configurables.annotations.Configurable;
  *
  * <p>Vision is ~30–50 ms behind, so while the robot spins the error it sees lags reality by
  * ω × latency. Too much {@code KP} or {@code MAX_TURN} shows up as overshoot and hunting
- * around the target. Once the Pinpoint is in, subtract the heading change since the frame's
- * capture time (architecture doc §7.4) and the gains can go up.
+ * around the target. {@code Robot.aimError} subtracts the heading change since the frame's
+ * capture time (architecture doc §7.4); once the Pinpoint is in and that correction is live,
+ * the gains can go up.
  *
  * <p>Fields are {@code public static} non-final so Panels can tune them live; the values are
  * starting points, not tuned. Pure math otherwise — no SDK.

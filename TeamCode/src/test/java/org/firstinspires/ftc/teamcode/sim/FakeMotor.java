@@ -9,13 +9,14 @@ import java.util.List;
 
 /**
  * A {@link DcMotorEx} that records every {@code setPower} — i.e. every hardware transaction
- * the write gate let through. Every other method is a no-op returning a zero value. A
- * {@link Proxy} rather than a hand-written class because {@code DcMotorEx} has ~50 methods.
+ * the write gate let through — and reports a settable {@code getVelocity()}. Every other
+ * method is a no-op returning a zero value. A {@link Proxy} rather than a hand-written class because {@code DcMotorEx} has ~50 methods.
  */
 public final class FakeMotor {
 
     public final DcMotorEx motor;
     private final List<Double> writes = new ArrayList<>();
+    private volatile double velocity;
 
     public FakeMotor() {
         motor = (DcMotorEx) Proxy.newProxyInstance(
@@ -26,6 +27,9 @@ public final class FakeMotor {
                         case "setPower":
                             writes.add((Double) args[0]);
                             return null;
+                        case "getVelocity":
+                            // Ticks per second; the AngleUnit overload is not used by our code.
+                            return velocity;
                         case "getPower":
                             return writes.isEmpty() ? 0.0 : writes.get(writes.size() - 1);
                         case "toString":
@@ -48,6 +52,11 @@ public final class FakeMotor {
     /** The power the motor is running at — 0 if never written. */
     public double power() {
         return writes.isEmpty() ? 0.0 : writes.get(writes.size() - 1);
+    }
+
+    /** What {@code getVelocity()} reports, in encoder ticks per second. */
+    public void setVelocity(double ticksPerSecond) {
+        velocity = ticksPerSecond;
     }
 
     private static Object zero(Class<?> type) {

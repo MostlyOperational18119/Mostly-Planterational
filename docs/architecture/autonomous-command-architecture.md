@@ -1,7 +1,7 @@
 # BIOBUZZ Autonomous Architecture — Ivy + Pedro Pathing
 
-**Team:** BIOBUZZ · **Season:** FTC 2026–27 · **Status:** §10 steps 1–2 implemented (`Robot`,
-`Subsystem`, `Drive`, loop instrumentation); the rest is still design
+**Team:** BIOBUZZ · **Season:** FTC 2026–27 · **Status:** every §10 step has code; on-robot
+verification is outstanding — see CLAUDE.md for what each step still needs
 **Targets:** `com.pedropathing:ivy:1.0.0`, `com.pedropathing:ftc:2.1.2`, FTC SDK 12.0
 
 ---
@@ -866,6 +866,13 @@ telemetry call outside the throttle, or a path being built mid-routine.
 ## 10. Implementation order
 
 Each step is independently testable; nothing later is required to validate anything earlier.
+
+> **BIOBUZZ mapping.** There is no lift or turret this season. Step 3's closed-loop
+> subsystem is the flywheel (`Outtake`, velocity control in `write()`). Step 6's background
+> aiming is chassis aiming: `Drive.aimedTeleopDrive` / `aimInPlace` servo the vision aim
+> error, and `ShootingRoutines.aimAndShoot` holds the aim for the whole shot. Step 7's
+> `PoseBuffer` is `HeadingHistory`: vision measures the CELLS relative to the robot, so only
+> the heading change since capture is needed.
 
 1. **`Subsystem`, `Robot`, bulk caching, `LoopTimer`.** Ship with one trivial subsystem and
    confirm the loop holds ≤ 6 ms median with nothing else running. This is the foundation —
