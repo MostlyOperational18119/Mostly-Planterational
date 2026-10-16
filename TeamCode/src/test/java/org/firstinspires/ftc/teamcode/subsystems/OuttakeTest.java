@@ -10,10 +10,11 @@ import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
 
 import org.firstinspires.ftc.teamcode.sim.FakeMotor;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-/** Outtake on its own: no follower needed, so the loop is just execute → write. */
+/** Outtake on its own: no follower needed, so the loop is just read → execute → write. */
 public class OuttakeTest {
 
     private FakeMotor motor;
@@ -26,6 +27,19 @@ public class OuttakeTest {
         outtake = new Outtake(motor.motor);
     }
 
+    @After
+    public void restoreTuning() {
+        // Panels-tunable statics: a test that sets them must not leak into the next.
+        Outtake.TARGET_RPM = 0;
+        Outtake.KV = 1.0 / 6000;
+        Outtake.KP = 0.0005;
+    }
+
+    /** Sets what the encoder reports, in flywheel rpm. */
+    private void measure(double rpm) {
+        motor.setVelocity(rpm / 60 * Outtake.TICKS_PER_REV);
+    }
+
     private void cycle() {
         outtake.read();
         Scheduler.execute();
@@ -33,11 +47,11 @@ public class OuttakeTest {
     }
 
     @Test
-    public void spinRunsAtFullPowerUntilCancelled() {
+    public void spinRunsAtSpinPowerUntilCancelled() {
         Command spin = outtake.spin();
         spin.schedule();
         for (int i = 0; i < 50; i++) cycle();
-        assertEquals(1.0, motor.power(), 0.0);
+        assertEquals(Outtake.SPIN_POWER, motor.power(), 0.0);
         assertEquals("unchanged power must not be rewritten", 1, motor.writes().size());
 
         spin.cancel();
@@ -85,5 +99,64 @@ public class OuttakeTest {
         cycle();
         outtake.stop();
         assertEquals(0.0, motor.power(), 0.0);
+    }
+
+    @Test
+    public void unsetTargetMeansOpenLoopAndReadyOnceSpinning() {
+        assertFalse(outtake.readyToFeed());
+        outtake.spin().schedule();
+        measure(2500);
+        cycle();
+        assertEquals(Outtake.SPIN_POWER, motor.power(), 0.0);
+        assertEquals(2500, outtake.rpm(), 1e-9);
+        assertFalse("no target, so never 'at speed'", outtake.atSpeed());
+        assertTrue(outtake.readyToFeed());
+    }
+
+    @Test
+    public void atTargetTheFeedforwardAloneHoldsSpeed() {
+        Outtake.TARGET_RPM = 3000;
+        outtake.spin().schedule();
+        measure(3000);
+        cycle();
+        assertEquals(0.5, motor.power(), 1e-9);
+        assertTrue(outtake.atSpeed());
+        assertTrue(outtake.readyToFeed());
+    }
+
+    @Test
+    public void belowTargetPushesHarderAndIsNotReady() {
+        Outtake.TARGET_RPM = 3000;
+        outtake.spin().schedule();
+        measure(2600);          // a shot just pulled it down
+        cycle();
+        assertEquals(0.5 + 0.0005 * 400, motor.power(), 1e-9);
+        assertFalse(outtake.atSpeed());
+        assertFalse(outtake.readyToFeed());
+    }
+
+    @Test
+    public void powerIsClippedAndNeverReversed() {
+        Outtake.TARGET_RPM = 3000;
+        outtake.spin().schedule();
+        measure(0);
+        cycle();
+        assertEquals("spin-up saturates", 1.0, motor.power(), 0.0);
+        measure(6000);
+        cycle();
+        assertEquals("over speed coasts, never brakes", 0.0, motor.power(), 0.0);
+    }
+
+    @Test
+    public void endingSpinCutsPowerUnderVelocityControlToo() {
+        Outtake.TARGET_RPM = 3000;
+        Command spin = outtake.spin();
+        spin.schedule();
+        measure(2000);
+        cycle();
+        spin.cancel();
+        cycle();
+        assertEquals(0.0, motor.power(), 0.0);
+        assertFalse(outtake.atSpeed());
     }
 }

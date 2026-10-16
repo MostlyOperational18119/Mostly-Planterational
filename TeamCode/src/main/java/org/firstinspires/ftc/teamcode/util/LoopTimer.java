@@ -39,14 +39,16 @@ public final class LoopTimer {
     /** Records the period since the previous call. Call once per loop, at the same point. */
     public void tick() {
         long now = clock.getAsLong();
-        if (lastTick != Long.MIN_VALUE) {
-            long period = now - lastTick;
-            periods[index] = period;
-            index = (index + 1) % WINDOW;
-            if (count < WINDOW) count++;
-            if (period > peak) peak = period;
-        }
+        if (lastTick != Long.MIN_VALUE) record(now - lastTick);
         lastTick = now;
+    }
+
+    /** Records one duration directly — for timing a phase rather than the whole loop. */
+    public void record(long nanos) {
+        periods[index] = nanos;
+        index = (index + 1) % WINDOW;
+        if (count < WINDOW) count++;
+        if (nanos > peak) peak = nanos;
     }
 
     public int samples() {

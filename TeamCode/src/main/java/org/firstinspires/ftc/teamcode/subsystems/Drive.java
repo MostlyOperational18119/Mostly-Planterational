@@ -234,6 +234,15 @@ public class Drive implements Subsystem {
     }
 
     /**
+     * Turns in place to servo {@code aimError} to zero, and keeps holding it there; with no
+     * target in view it sits still. The autonomous form of {@link #aimedTeleopDrive} — and like
+     * it, needs no odometry. Never finishes: bound it, or put it under a {@code deadline}.
+     */
+    public CommandBuilder aimInPlace(DoubleSupplier aimError) {
+        return aimedTeleopDrive(() -> 0, () -> 0, () -> 0, aimError);
+    }
+
+    /**
      * Driver control, as a proper command so that the drivetrain has exactly one owner and an
      * automated move can preempt it through the requirement system.
      *

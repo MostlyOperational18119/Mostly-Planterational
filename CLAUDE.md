@@ -17,11 +17,14 @@ All team code lives in `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/`.
 TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── Robot.java        Subsystem registry + the loop contract (startCycle/read/update/
 │                     execute/write/telemetry). OpModes call robot.cycle().
+│                     aimError() — vision's aim corrected for the turn since capture;
+│                     DEBUG_TIMING per-phase timing line
 ├── subsystems/       Drive.java — Pedro Follower wrapped as a requirable subsystem
 │                     Intake.java — one open-loop motor ("intake"), collect/eject/off
 │                     Transfer.java — open-loop motor ("transfer") lifting pollen into the
 │                     flywheel, feed/reverse/off
-│                     Outtake.java — open-loop flywheel ("outtake"), spin/off
+│                     Outtake.java — flywheel ("outtake"), velocity control in write();
+│                     open loop until TARGET_RPM is set. spin/off, atSpeed/readyToFeed
 │                     Vision.java — HIVE CELL clusters relative to the robot; which CELL is up
 ├── vision/           VisionSource (interface) / LimelightSource (the only Limelight3A user)
 │                     VisionSample — LLResult reduced to per-tag robot-frame positions
@@ -33,13 +36,16 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     HubManager.java / LynxHubs.java (bulk-cache control)
 │                     LoopTimer.java, WriteGate.java, Timeouts.java, Fork.java
 │                     Aim.java — bearing / turn / distance to a goal, pure math
+│                     HeadingHistory.java — wall-clock-keyed headings for latency correction
 │                     AimController.java — chassis aim law (P + kS, capped), Panels-tunable
 ├── pedroPathing/     Constants.java (FollowerConstants, MecanumConstants, PathConstraints,
 │                     createFollower, LOCALIZER_INSTALLED)
 │                     StubLocalizer.java — fixed pose, for the chassis without odometry
 │                     Tuning.java (Pedro's tuning OpModes; refuses to run without a localizer)
 ├── routines/         TestRoutines.java — routine trees as static factories (§8.2)
+│                     ShootingRoutines.java — aimAndShoot: aim on vision, then feed
 ├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
+│                     AimAndShootAuto.java — "Test: Aim and Shoot", no localizer needed
 │                     TestPaths.java — its PathChains, built at init
 └── teleop/           DriveTeleOp.java — driver control on the loop contract; hold-to-aim
                       CommandTeleOpDemo.java — upstream Ivy + Pedro reference, not an OpMode
@@ -47,17 +53,28 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 ├── sim/              SimRobot (real Robot + Follower over fakes), SimDrivetrain,
 │                     SimLocalizer, FakeMotor, FakeVisionSource
-├── util/             tier 1: WriteGate, LoopTimer, Timeouts, Aim, AimController
+├── util/             tier 1: WriteGate, LoopTimer, Timeouts, Aim, AimController,
+│                     HeadingHistory
 ├── vision/           tier 1: FieldFrame, ClusterFit
 ├── field/            tier 1: CellTest (tag IDs against the manual)
 ├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest
-└── routines/         tier 2: TestRoutinesTest
+├── routines/         tier 2: TestRoutinesTest, ShootingRoutinesTest
+└── RobotTest.java    tier 2: aimError latency correction, phase timing
 ```
 
-`Drive`, `Intake`, `Transfer`, `Outtake` and `Vision` exist so far. Of the architecture doc's implementation order (§10),
-step 3 is partly covered (the intake is open-loop, so closed-loop `goTo` is still untested)
-and step 5 has a test routine awaiting its on-robot run. Real routines need this season's
-field coordinates.
+`Drive`, `Intake`, `Transfer`, `Outtake` and `Vision` are the whole robot. Every step of the
+architecture doc's implementation order (§10) has code; what is left needs the robot:
+
+- **Step 1:** the ≤ 6 ms median loop has never been measured on hardware. Turn on
+  `Robot.DEBUG_TIMING` (Panels) for the per-phase breakdown.
+- **Step 3:** the flywheel is the closed-loop subsystem, but `Outtake.TARGET_RPM` is 0
+  (open loop) until someone measures it — the procedure is in `Outtake`'s Javadoc.
+  `TICKS_PER_REV = 28` is inferred from goBILDA's geared variants, not verified.
+- **Step 5:** `TestAuto` needs the Pinpoint; real routines also need field coordinates.
+- **Step 6:** `AimAndShootAuto` runs without odometry; `ShootingRoutines.AIM_TIMEOUT_MS` and
+  `FEED_MS` are placeholders.
+- **Step 7:** the latency correction is wired in but does nothing until the Pinpoint is
+  installed — `StubLocalizer`'s heading never changes.
 
 ## Libraries
 
@@ -121,8 +138,10 @@ odometry. In `DriveTeleOp`: alliance chosen in init (X blue, B red), right trigg
 aim. The flywheel fires straight forward from the robot's centreline (confirmed from the
 CAD: `AimController.LAUNCH_DIRECTION = 0`, `LAUNCHER_LEFT_OFFSET_IN = 0`), so aiming points
 robot forward at the target. The gains are untuned starting points, live-editable in
-Panels. Vision lag (~30–50 ms) limits the gains until the Pinpoint allows subtracting the
-heading change since capture.
+Panels. Vision lag (~30–50 ms) limits the gains. `Robot.aimError` corrects for it by
+subtracting the heading change since the frame's capture (`HeadingHistory`, wall-clock
+keyed like the Limelight's timestamps). On `StubLocalizer` that change is always zero, so
+the correction only starts working once the Pinpoint is in.
 
 Camera-side setup the code assumes: an AprilTag pipeline at index 0 (36h11, full 3D, tag
 size 82.55 mm), and the camera's mounting entered in the Limelight UI so robot-space z is
