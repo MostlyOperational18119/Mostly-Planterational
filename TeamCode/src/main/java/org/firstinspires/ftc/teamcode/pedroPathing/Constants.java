@@ -3,9 +3,12 @@ package org.firstinspires.ftc.teamcode.pedroPathing;
 import com.pedropathing.algorithm.Algorithm;
 import com.pedropathing.algorithm.Foresight;
 import com.pedropathing.algorithm.ForesightConfig;
+import com.pedropathing.controllers.Controller;
 import com.pedropathing.drivetrain.Drivetrain;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.localization.Localizer;
+import com.pedropathing.math.Matrix;
+import com.pedropathing.math.Vector2D;
 import com.pedropathing.revhub.drivetrains.Mecanum;
 import com.pedropathing.revhub.drivetrains.MecanumConfig;
 import com.pedropathing.revhub.localizers.PinpointConfig;
@@ -38,7 +41,7 @@ public class Constants {
      * following, {@code turnTo}/{@code hold} and {@code TestAuto} do not. Flip it once the
      * ForesightTuner's output is pasted into {@link #foresightConfig}.
      */
-    public static final boolean FORESIGHT_TUNED = false;
+    public static final boolean FORESIGHT_TUNED = true;
 
     /** True when paths, {@code turnTo} and {@code hold} can work. */
     public static boolean canFollowPaths() {
@@ -74,8 +77,8 @@ public class Constants {
     public static PinpointConfig localizerConfig = new PinpointConfig(c -> {
         c.name.set("pinpoint");
         c.podType.set(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
-        c.xPodOffset.set(-3.0);
-        c.yPodOffset.set(0.0);
+        c.xPodOffset.set(-3.5); // measured closer to -3.0
+        c.yPodOffset.set(-0.5); // and 0.0, but tuner outputted this
         c.xPodDirection.set(GoBildaPinpointDriver.EncoderDirection.FORWARD);
         c.yPodDirection.set(GoBildaPinpointDriver.EncoderDirection.FORWARD);
         c.globalDistanceUnit.set(DistanceUnit.INCH);
@@ -86,8 +89,31 @@ public class Constants {
      * Foresight, Pedro 3's path follower. <b>Empty until AutoTune has run</b>: paste the
      * ForesightTuner's generated block here, then set {@link #FORESIGHT_TUNED}.
      */
-    public static ForesightConfig foresightConfig = new ForesightConfig(c -> {
-    });
+    public static ForesightConfig foresightConfig = new ForesightConfig(
+            c -> {
+                Controller primaryTranslationalForward = Controller.proportional(0.27821191648616167);
+                Controller secondaryTranslationalForward = Controller.proportional(0.10279186918231503);
+                Controller primaryTranslationalLateral = Controller.proportional(0.3650113621296331);
+                Controller secondaryTranslationalLateral = Controller.proportional(0.13486194502367452);
+
+                c.forwardTranslational.set(Controller.piecewise(secondaryTranslationalForward).put(2.5, primaryTranslationalForward));
+                c.strafeTranslational.set(Controller.piecewise(secondaryTranslationalLateral).put(2.5, primaryTranslationalLateral));
+
+                c.coast.set(Controller.proportionalFeedforward(0.012111074949409481));
+                c.brake.set(Controller.proportionalFeedforward(0.010294413706998058));
+
+                c.headingFeedback.set(Controller.proportional(4.67241772496501));
+                c.headingBrakeCoefficients.set(Vector2D.cartesian(0.05495324202840157, 0.004803787126252708));
+
+                c.linearBrakeCoefficients.set(Matrix.diag(0.11758689312120184, 0.06353945655825877));
+                c.quadraticBrakeCoefficients.set(Matrix.diag(9.213075840783736E-4, 0.00166257899579791));
+
+                c.maxAchievableForwardVelocity.set(80.29533174944831);
+                c.maxAchievableStrafeVelocity.set(65.40178736314184);
+                c.naturalForwardDeceleration.set(28.188957576751253);
+                c.naturalStrafeDeceleration.set(58.60574023521338);
+            }
+    );
 
     public static Drivetrain createDrivetrain(HardwareMap hardwareMap) {
         return new Mecanum(hardwareMap, drivetrainConfig);
