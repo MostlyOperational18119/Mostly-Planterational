@@ -17,10 +17,9 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.2.0'
 
     implementation 'com.pedropathing:revhub:3.0.2'   // brings com.pedropathing:core
-    // AutoTune: robot-hosted tuning webpage. 1.0.1, not 1.0.2: 1.0.2's TunerScanner throws a
-    // NullPointerException on the first @Tuner it finds (putIfAbsent returns null), which Sloth
-    // reports as a fatal scanning error on the Driver Station. Fixed in 1.0.3 (beta as of writing).
-    implementation 'com.pedropathing:tuning:1.0.1'
+    // AutoTune: robot-hosted tuning webpage. 1.0.3-beta.1: 1.0.2's TunerScanner throws a
+    // NullPointerException on the first @Tuner (putIfAbsent(...).add), so nothing registers.
+    implementation 'com.pedropathing:tuning:1.0.3-beta.1'
     implementation 'com.bylazar:fullpanels:1.0.12'
 
     implementation 'com.pedropathing.ivy:core:1.1.1'  // Pedro-independent; its PedroCommands module is not used
