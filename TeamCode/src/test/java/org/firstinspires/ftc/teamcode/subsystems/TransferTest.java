@@ -30,7 +30,7 @@ public class TransferTest {
         transferMotor = new FakeMotor();
         outtakeMotor = new FakeMotor();
         transfer = new Transfer(transferMotor.motor);
-        outtake = new Outtake(outtakeMotor.motor);
+        outtake = new Outtake(outtakeMotor.motor, () -> Battery.NOMINAL_VOLTS);
     }
 
     private void cycle() {

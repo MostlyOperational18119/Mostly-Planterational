@@ -20,12 +20,13 @@ public class OuttakeTest {
 
     private FakeMotor motor;
     private Outtake outtake;
+    private double volts = Battery.NOMINAL_VOLTS;
 
     @Before
     public void setUp() {
         Scheduler.reset();
         motor = new FakeMotor();
-        outtake = new Outtake(motor.motor);
+        outtake = new Outtake(motor.motor, () -> volts);
     }
 
     @After
@@ -163,7 +164,7 @@ public class OuttakeTest {
 
     @Test
     public void spinForFollowsTheShotMapAsTheDistanceChanges() {
-        Outtake mapped = new Outtake(motor.motor,
+        Outtake mapped = new Outtake(motor.motor, () -> volts,
                 new ShotMap(new double[][] {{40, 2400}, {80, 3600}}));
         double[] distance = {40};
         mapped.spinFor(() -> distance[0]).schedule();
@@ -186,7 +187,7 @@ public class OuttakeTest {
 
     @Test
     public void spinForWithoutADistanceFallsBackToTargetRpmThenOpenLoop() {
-        Outtake mapped = new Outtake(motor.motor, new ShotMap(new double[][] {{40, 2400}}));
+        Outtake mapped = new Outtake(motor.motor, () -> volts, new ShotMap(new double[][] {{40, 2400}}));
         Command spin = mapped.spinFor(() -> Double.NaN);
         spin.schedule();
         mapped.read();
@@ -206,7 +207,7 @@ public class OuttakeTest {
     @Test
     public void anEmptyShotMapFallsBackToTargetRpm() {
         Outtake.TARGET_RPM = 3000;
-        Outtake unmapped = new Outtake(motor.motor, new ShotMap(new double[][] {}));
+        Outtake unmapped = new Outtake(motor.motor, () -> volts, new ShotMap(new double[][] {}));
         assertEquals(3000, unmapped.rpmFor(55), 0.0);
     }
 
@@ -230,5 +231,39 @@ public class OuttakeTest {
         cycle();
         assertEquals(0, outtake.targetRpm(), 0.0);
         assertFalse(outtake.readyToFeed());
+    }
+
+    @Test
+    public void openLoopPowerRisesAsTheBatterySags() {
+        outtake.spin().schedule();
+        cycle();
+        assertEquals("at nominal, unchanged", Outtake.SPIN_POWER, motor.power(), 1e-9);
+        volts = 10;             // the intake just pulled the battery down
+        cycle();
+        assertEquals(Outtake.SPIN_POWER * 12 / 10, motor.power(), 1e-9);
+        volts = 8;
+        cycle();
+        assertEquals("never past full power", 1.0, motor.power(), 0.0);
+    }
+
+    @Test
+    public void theFeedforwardIsCompensatedToo() {
+        Outtake.TARGET_RPM = 3000;
+        outtake.spin().schedule();
+        measure(3000);
+        volts = 13;             // fresh battery: less power for the same speed
+        cycle();
+        assertEquals(Outtake.KV * 3000 * 12 / 13, motor.power(), 1e-9);
+    }
+
+    @Test
+    public void rawRunIsNotCompensated() {
+        volts = 10;
+        outtake.run(1.0).schedule();
+        cycle();
+        assertEquals("a measurement tool: exactly the power asked for", 1.0, motor.power(), 0.0);
+        outtake.run(0.5).schedule();
+        cycle();
+        assertEquals(0.5, motor.power(), 0.0);
     }
 }

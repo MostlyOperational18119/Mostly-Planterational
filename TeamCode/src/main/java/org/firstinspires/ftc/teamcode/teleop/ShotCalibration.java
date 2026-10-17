@@ -11,6 +11,7 @@ import com.qualcomm.robotcore.util.RobotLog;
 
 import org.firstinspires.ftc.teamcode.Robot;
 import org.firstinspires.ftc.teamcode.field.Alliance;
+import org.firstinspires.ftc.teamcode.subsystems.Battery;
 import org.firstinspires.ftc.teamcode.subsystems.Outtake;
 import org.firstinspires.ftc.teamcode.util.AimController;
 
@@ -28,7 +29,8 @@ import java.util.Locale;
  *   <li><b>Ticks per rev:</b> BACK zeroes the encoder readout; turn the flywheel one
  *       revolution by hand and read the count.</li>
  *   <li><b>Free speed:</b> hold the left trigger to run the flywheel at power 1; once the rpm
- *       settles, the suggested {@code KV} is shown.</li>
+ *       settles, the suggested {@code KV} is shown — already scaled to 12 V from the battery
+ *       voltage, so it does not matter how charged the battery is.</li>
  *   <li><b>Shot points:</b> Y toggles the flywheel at the calibration speed, dpad up/down
  *       changes it by {@link #RPM_STEP}. Hold the right trigger to aim, the right bumper to
  *       collect (left ejects), A to feed a shot. When shots score, X records
@@ -138,9 +140,12 @@ public class ShotCalibration extends LinearOpMode {
         s.append(String.format(Locale.US, "calibration speed: %.0f rpm (dpad up/down)\n",
                 calibrationRpm));
         double rpm = robot.outtake.rpm();
-        s.append(String.format(Locale.US, "at power %.2f: %.0f rpm%s\n", robot.outtake.power(),
-                rpm, robot.outtake.power() == 1 && rpm > 0
-                        ? String.format(Locale.US, " → KV = 1.0 / %.0f", rpm) : ""));
+        double volts = robot.battery.volts();
+        // Free speed scales with voltage: rpm at 12 V = measured rpm × 12 / measured volts.
+        s.append(String.format(Locale.US, "at power %.2f, %.2f V: %.0f rpm%s\n",
+                robot.outtake.power(), volts, rpm, robot.outtake.power() == 1 && rpm > 0
+                        ? String.format(Locale.US, " → KV = 1.0 / %.0f",
+                                rpm * Battery.NOMINAL_VOLTS / volts) : ""));
         s.append(String.format(Locale.US, "encoder since BACK: %d ticks (TICKS_PER_REV = %.0f)\n",
                 robot.outtake.position() - encoderZero, Outtake.TICKS_PER_REV));
         s.append("SHOT_POINTS:");

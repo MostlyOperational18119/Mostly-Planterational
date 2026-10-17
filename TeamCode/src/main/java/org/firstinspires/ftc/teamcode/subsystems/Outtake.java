@@ -36,6 +36,14 @@ import java.util.function.DoubleSupplier;
  * yet) or an empty table it falls back to {@link #TARGET_RPM}; with that 0 too, it runs open loop
  * at {@link #SPIN_POWER}. So every stage of bring-up below still shoots.
  *
+ * <p><b>Voltage compensated.</b> A motor's speed at a given power scales with the battery
+ * voltage, and the battery sags while the intake or drivetrain draws current — enough to drop
+ * shots short right after intaking. So {@link #SPIN_POWER}, {@link #KV} and {@link #KP} are
+ * all "at {@link Battery#NOMINAL_VOLTS}", and {@link #write()} scales the output by nominal ÷
+ * measured volts (sampled by {@link Battery}). This matters even under velocity control:
+ * the feedforward does most of the work, and P alone would leave a sag-sized speed error.
+ * {@link #run} is the exception — a raw power, for measuring.
+ *
  * <p><b>Bring-up, "measure first"</b>, all in the {@code ShotCalibration} OpMode:
  * <ol>
  *   <li><b>Ticks per rev:</b> turn the flywheel exactly one revolution by hand and read the
@@ -75,7 +83,7 @@ public class Outtake implements Subsystem {
 
     public static final ShotMap SHOT_MAP = new ShotMap(SHOT_POINTS);
 
-    /** Open-loop power, used when there is no target speed at all. */
+    /** Open-loop power at {@link Battery#NOMINAL_VOLTS}, used when there is no target speed. */
     public static double SPIN_POWER = 0.8;
 
     /**
@@ -84,7 +92,11 @@ public class Outtake implements Subsystem {
      */
     public static double TARGET_RPM = 0;
 
-    /** Feedforward, power per rpm: 1 / free speed at power 1. Assumes ~6000 rpm — measure it. */
+    /**
+     * Feedforward, power per rpm at {@link Battery#NOMINAL_VOLTS}: 1 / the free speed at power 1
+     * and 12 V ({@code ShotCalibration} does the conversion). 600RPM actually works better,
+     * look into more tomorrow when calibrating
+     */
     public static double KV = 1.0 / 6000;
 
     /** Proportional, power per rpm of error. Untuned starting point. */
@@ -94,6 +106,7 @@ public class Outtake implements Subsystem {
     public static double AT_SPEED_TOLERANCE_RPM = 100;
 
     private final DcMotorEx motor;
+    private final DoubleSupplier volts;
     private final ShotMap shotMap;
     private final WriteGate powerGate = new WriteGate(WriteGate.MOTOR_POWER);
 
@@ -109,8 +122,12 @@ public class Outtake implements Subsystem {
     // --- what write() last commanded, for telemetry and queries ---
     private double power;
 
-    /** The competition path: the lookup and one-time motor configuration, at init. */
-    public static Outtake fromHardwareMap(HardwareMap hardwareMap) {
+    /**
+     * The competition path: the lookup and one-time motor configuration, at init.
+     *
+     * @param volts battery voltage, e.g. {@code battery::volts}
+     */
+    public static Outtake fromHardwareMap(HardwareMap hardwareMap, DoubleSupplier volts) {
         DcMotorEx motor = hardwareMap.get(DcMotorEx.class, "outtake");
         motor.setDirection(DIRECTION);
         // Our controller runs in write(); the hub's own velocity PID stays out of it. The
@@ -118,16 +135,17 @@ public class Outtake implements Subsystem {
         motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         // FLOAT, never BRAKE: braking a spinning flywheel dumps its energy into the gearbox.
         motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-        return new Outtake(motor);
+        return new Outtake(motor, volts);
     }
 
-    public Outtake(DcMotorEx motor) {
-        this(motor, SHOT_MAP);
+    public Outtake(DcMotorEx motor, DoubleSupplier volts) {
+        this(motor, volts, SHOT_MAP);
     }
 
     /** @param shotMap injectable so tests need not depend on the measured table. */
-    public Outtake(DcMotorEx motor, ShotMap shotMap) {
+    public Outtake(DcMotorEx motor, DoubleSupplier volts, ShotMap shotMap) {
         this.motor = motor;
+        this.volts = volts;
         this.shotMap = shotMap;
     }
 
@@ -144,12 +162,13 @@ public class Outtake implements Subsystem {
     }
 
     /**
-     * Feedforward plus P, clipped to [0, 1]: never driven backwards, since reverse power on a
-     * spinning flywheel is a brake. Above target it coasts down instead.
+     * Feedforward plus P — or {@link #SPIN_POWER} open loop — compensated for the battery and
+     * clipped to [0, 1]: never driven backwards, since reverse power on a spinning flywheel is
+     * a brake. Above target it coasts down instead.
      */
     private double spinPower() {
-        if (!closedLoop()) return SPIN_POWER;
-        double p = KV * targetRpm + KP * (targetRpm - rpm);
+        double p = closedLoop() ? KV * targetRpm + KP * (targetRpm - rpm) : SPIN_POWER;
+        p *= Battery.NOMINAL_VOLTS / volts.getAsDouble();
         return Math.max(0, Math.min(1, p));
     }
 
@@ -260,7 +279,10 @@ public class Outtake implements Subsystem {
                 .requiring(this);
     }
 
-    /** Holds a raw open-loop {@code power} while scheduled; zero on any end. */
+    /**
+     * Holds a raw open-loop {@code power} while scheduled, <em>not</em> voltage compensated —
+     * {@code ShotCalibration} measures the free speed with it; zero on any end.
+     */
     public CommandBuilder run(double power) {
         return Command.build()
                 .setStart(() -> openLoopPower = power)

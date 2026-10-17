@@ -10,6 +10,7 @@ import com.pedropathing.ivy.Scheduler;
 import org.firstinspires.ftc.teamcode.Robot;
 import org.firstinspires.ftc.teamcode.sim.FakeMotor;
 import org.firstinspires.ftc.teamcode.sim.SimDrivetrain;
+import org.firstinspires.ftc.teamcode.subsystems.Battery;
 import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.subsystems.Outtake;
 import org.firstinspires.ftc.teamcode.subsystems.Transfer;
@@ -31,8 +32,9 @@ public class StubLocalizerTest {
         Scheduler.reset();
         // As on the robot before AutoTune: no Foresight, which manual driving never consults.
         Follower follower = new Follower(new StubLocalizer(), drivetrain, new UntunedAlgorithm());
-        robot = new Robot(HubManager.NONE, follower, new Intake(new FakeMotor().motor),
-                new Transfer(new FakeMotor().motor), new Outtake(new FakeMotor().motor),
+        robot = new Robot(HubManager.NONE, follower, new Battery(() -> 12.0),
+                new Intake(new FakeMotor().motor), new Transfer(new FakeMotor().motor),
+                new Outtake(new FakeMotor().motor, () -> 12.0),
                 new Vision(VisionSource.NONE));
         follower.setPose(Pose.zero());
         follower.update();

@@ -25,7 +25,9 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     Transfer.java — open-loop motor ("transfer") lifting pollen into the
 │                     flywheel, feed/reverse/off
 │                     Outtake.java — flywheel ("outtake"), velocity control in write();
-│                     SHOT_POINTS distance→rpm table. spin/spinFor/spinAt/off, atSpeed/readyToFeed
+│                     SHOT_POINTS distance→rpm table, voltage compensated.
+│                     spin/spinFor/spinAt/off, atSpeed/readyToFeed
+│                     Battery.java — battery voltage, sampled every 100 ms (not bulk data)
 │                     Vision.java — HIVE CELL clusters relative to the robot; which CELL is up
 ├── vision/           VisionSource (interface) / LimelightSource (the only Limelight3A user)
 │                     VisionSample — LLResult reduced to per-tag robot-frame positions
@@ -62,12 +64,14 @@ TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 │                     HeadingHistory, ShotMap
 ├── vision/           tier 1: FieldFrame, ClusterFit
 ├── field/            tier 1: CellTest (tag IDs against the manual)
-├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest
+├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest,
+│                     BatteryTest
 ├── routines/         tier 2: TestRoutinesTest, ShootingRoutinesTest
 └── RobotTest.java    tier 2: aimError latency correction, phase timing
 ```
 
-`Drive`, `Intake`, `Transfer`, `Outtake` and `Vision` are the whole robot. Every step of the
+`Drive`, `Intake`, `Transfer`, `Outtake` and `Vision` are the whole robot (plus `Battery`,
+which only reads the voltage). Every step of the
 architecture doc's implementation order (§10) has code; what is left needs the robot:
 
 - **Step 1:** the ≤ 6 ms median loop has never been measured on hardware. Turn on
@@ -77,7 +81,9 @@ architecture doc's implementation order (§10) has code; what is left needs the 
   distance→rpm table, interpolated, ends held) with the Limelight's distance to the up CELL
   (`Robot.shotDistance`, last sighting held while out of view). Nothing is measured yet:
   `TICKS_PER_REV = 28` is inferred, `KV` assumes 6000 rpm free speed, `SHOT_POINTS` is empty
-  and `TARGET_RPM` is 0 — so today it still runs open loop at `SPIN_POWER`. The
+  and `TARGET_RPM` is 0 — so today it still runs open loop at `SPIN_POWER`. Its output is
+  voltage compensated (× 12 V ÷ `Battery.volts()`), because intake current sagged the battery
+  enough to drop shots; `SPIN_POWER`/`KV`/`KP` are therefore "at 12 V". The
   **"Calibrate: Flywheel and Shots"** OpMode (`ShotCalibration`) measures all of it, in the
   order in `Outtake`'s Javadoc. Planned: a Pinpoint fallback for the distance once the HIVE's
   field coordinates are known.
@@ -134,6 +140,9 @@ puts `StubLocalizer` in, for a chassis without pods.
 
 The Pinpoint is an I2C device, read inside `follower.update()` (phase 3) — the one I2C read
 the loop budget accepts. Check the `update` figure in `Robot.DEBUG_TIMING`'s phase line.
+The other non-bulk read is the battery voltage (`VoltageSensor.getVoltage()` is its own hub
+transaction, `LynxGetADCCommand`): `Battery` samples it once per 100 ms in phase 2, so it
+shows in the `read` max, not the median.
 
 Docs: <https://pedropathing.com/docs/pathing> ·
 [Quickstart](https://github.com/Pedro-Pathing/Quickstart) (source of `procedures/`)
@@ -296,8 +305,8 @@ OpMode base class.** Everything else our code is built from already runs headles
 
 These are deliberate choices in the shell, not accidents — keep them when adding subsystems:
 
-1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower, Intake, Transfer,
-   Outtake, Vision)` —
+1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower, Battery, Intake,
+   Transfer, Outtake, Vision)` —
    one parameter per hardware-backed subsystem — with
    `Robot.fromHardwareMap(hw)` as the competition path. A `HardwareMap` never reaches
    anything below that factory.
