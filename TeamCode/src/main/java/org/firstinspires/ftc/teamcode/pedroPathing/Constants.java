@@ -86,8 +86,8 @@ public class Constants {
     });
 
     /**
-     * Foresight, Pedro 3's path follower. <b>Empty until AutoTune has run</b>: paste the
-     * ForesightTuner's generated block here, then set {@link #FORESIGHT_TUNED}.
+     * Foresight, Pedro 3's path follower, as measured by AutoTune's Foresight Tuner. To
+     * re-tune, run the tuner again and replace this block with its generated output.
      */
     public static ForesightConfig foresightConfig = new ForesightConfig(
             c -> {

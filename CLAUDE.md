@@ -41,7 +41,7 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── pedroPathing/     Constants.java — Pedro 3 configs (drivetrainConfig, localizerConfig,
 │                     foresightConfig), createFollower, LOCALIZER_INSTALLED, FORESIGHT_TUNED
 │                     StubLocalizer.java — fixed pose, for a chassis without odometry
-│                     UntunedAlgorithm.java — stands in for Foresight until AutoTune has run
+│                     UntunedAlgorithm.java — stands in for Foresight when FORESIGHT_TUNED is false
 │                     Tuning.java — @Tuner registrations for the AutoTune webpage
 │                     procedures/ — AutoTune procedures, copied unchanged from the Quickstart
 ├── routines/         TestRoutines.java — routine trees as static factories (§8.2)
@@ -72,8 +72,8 @@ architecture doc's implementation order (§10) has code; what is left needs the 
 - **Step 3:** the flywheel is the closed-loop subsystem, but `Outtake.TARGET_RPM` is 0
   (open loop) until someone measures it — the procedure is in `Outtake`'s Javadoc.
   `TICKS_PER_REV = 28` is inferred from goBILDA's geared variants, not verified.
-- **Step 5:** `TestAuto` needs AutoTune run first (`Constants.FORESIGHT_TUNED`); real
-  routines also need field coordinates.
+- **Step 5:** Pedro is tuned, so `TestAuto` can run; its on-robot run (wall-clock time and
+  loop period) is still to do. Real routines need this season's field coordinates.
 - **Step 6:** `AimAndShootAuto` runs without odometry; `ShootingRoutines.AIM_TIMEOUT_MS` and
   `FEED_MS` are placeholders.
 - **Step 7:** the latency correction is live now the Pinpoint is in, but untested on the
@@ -102,23 +102,25 @@ four mode changes — `follow`, `hold`, `manual`, `stop` — none of which touch
 
 Drive motors are `motorFL`/`motorFR`/`motorBL`/`motorBR` (`Mecanum`, directions verified on
 the robot; its `CachedMotor`s gate writes). Localization is a **goBILDA Pinpoint** (I2C
-`"pinpoint"`, two 4-Bar pods; forward pod 3 in right of centre, strafe pod on the fore/aft
-centreline, both directions FORWARD as verified on Pedro 2). Building the localizer
-recalibrates the Pinpoint IMU and sleeps 500 ms — init only, robot still.
+`"pinpoint"`, two 4-Bar pods, both directions FORWARD). The pod offsets are the Pinpoint
+Tuner's output — x pod −3.5 in, y pod −0.5 in — not the tape-measured −3.0 / 0.0. Building
+the localizer recalibrates the Pinpoint IMU and sleeps 500 ms — init only, robot still.
 
 **Tuning is AutoTune**, a webpage the Robot Controller hosts at
 `http://192.168.43.1:10158` (starts with the app; Panels stays on 8001). `Tuning.java`
 registers its procedures with `@Tuner`; each prints Java to paste into `Constants`. Order:
-Mecanum Tuner → Pinpoint Tuner → Foresight Tuner → Tests.
+Mecanum Tuner → Pinpoint Tuner → Foresight Tuner → Tests. Re-run the affected tuners after
+any drivetrain, pod or weight change.
 
-**Foresight is not tuned yet**, and cannot even be constructed without the Foresight Tuner's
-measurements. So `Constants.FORESIGHT_TUNED = false` puts `UntunedAlgorithm` in its place:
-manual driving never consults the algorithm, so TeleOp, hold-to-aim, `AimAndShootAuto` and
-AutoTune all work; following/holding commands zero power and never arrives. `TestAuto` and
-the TeleOp A-button snap check `Constants.canFollowPaths()` and refuse. After pasting the
-tuner's output into `foresightConfig`, flip the flag.
+**Pedro is tuned**: `drivetrainConfig`, `localizerConfig` and `foresightConfig` hold
+AutoTune's output, and `Constants.FORESIGHT_TUNED = true`. Paths, `turnTo`/`hold`,
+`TestAuto` and the TeleOp A-button snap are all live. The flag stays as a switch: Foresight
+cannot be constructed without its measurements, so setting it `false` (say, after clearing
+`foresightConfig` to re-tune) puts `UntunedAlgorithm` in its place — manual driving still
+works, following/holding commands zero power, and anything checking
+`Constants.canFollowPaths()` refuses.
 
-`Constants.LOCALIZER_INSTALLED` (now `true`) is the same kind of switch for odometry: `false`
+`Constants.LOCALIZER_INSTALLED` (`true`) is the same kind of switch for odometry: `false`
 puts `StubLocalizer` in, for a chassis without pods.
 
 The Pinpoint is an I2C device, read inside `follower.update()` (phase 3) — the one I2C read

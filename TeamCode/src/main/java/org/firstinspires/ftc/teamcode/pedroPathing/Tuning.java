@@ -16,14 +16,15 @@ import org.firstinspires.ftc.teamcode.pedroPathing.procedures.Tests;
  * {@code @Tuner} method is found by the tuning library's class scanner; there is no OpMode to
  * pick on the Driver Station.
  *
- * <p>Run them in this order, pasting each one's generated Java into {@link Constants}:
+ * <p>All four have been run and their output is in {@link Constants}. To re-tune (after a
+ * drivetrain, pod or weight change), run them in this order, pasting each one's generated Java
+ * into {@link Constants}:
  * <ol>
  *   <li><b>Mecanum Tuner</b> → {@code drivetrainConfig} (motor directions).</li>
  *   <li><b>Pinpoint Tuner</b> → {@code localizerConfig} (pod directions and offsets).</li>
- *   <li><b>Foresight Tuner</b> → {@code foresightConfig}; then set
- *       {@code Constants.FORESIGHT_TUNED = true} and redeploy.</li>
- *   <li><b>Tests</b> — Localization/Odometry/Pose/Driving work at any time; Hold, Line, Curve and
- *       Interpolation need step 3 done first.</li>
+ *   <li><b>Foresight Tuner</b> → {@code foresightConfig}, then redeploy.</li>
+ *   <li><b>Tests</b> — Localization/Odometry/Pose/Driving check the localizer and drivetrain;
+ *       Hold, Line, Curve and Interpolation check Foresight.</li>
  * </ol>
  *
  * <p>The procedures themselves (in {@code procedures/}) are copied unchanged from the
