@@ -1,6 +1,6 @@
 package org.firstinspires.ftc.teamcode.teleop;
 
-import com.pedropathing.ftc.drivetrains.MecanumConstants;
+import com.pedropathing.revhub.drivetrains.MecanumConfig;
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -12,7 +12,7 @@ import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
 /**
  * Drive-motor bring-up: spins one drive motor at a time, by the names and directions in
- * {@link Constants#driveConstants}, so you can see which wheel each config name really is.
+ * {@link Constants#drivetrainConfig}, so you can see which wheel each config name really is.
  *
  * <p>The buttons sit where the wheels do: left bumper = front-left, right bumper = front-right,
  * left trigger = back-left, right trigger = back-right. Hold one with the robot on blocks:
@@ -37,11 +37,11 @@ public class DriveMotorTest extends LinearOpMode {
 
     @Override
     public void runOpMode() {
-        MecanumConstants c = Constants.driveConstants;
-        DcMotorEx fl = motor(c.leftFrontMotorName, c.leftFrontMotorDirection);
-        DcMotorEx fr = motor(c.rightFrontMotorName, c.rightFrontMotorDirection);
-        DcMotorEx bl = motor(c.leftRearMotorName, c.leftRearMotorDirection);
-        DcMotorEx br = motor(c.rightRearMotorName, c.rightRearMotorDirection);
+        MecanumConfig c = Constants.drivetrainConfig;
+        DcMotorEx fl = motor(c.frontLeftName.get(), c.frontLeftDirection.get());
+        DcMotorEx fr = motor(c.frontRightName.get(), c.frontRightDirection.get());
+        DcMotorEx bl = motor(c.backLeftName.get(), c.backLeftDirection.get());
+        DcMotorEx br = motor(c.backRightName.get(), c.backRightDirection.get());
 
         telemetry.addLine("Robot on blocks. Hold LB = front-left, RB = front-right,");
         telemetry.addLine("LT = back-left, RT = back-right. Each should spin its wheel forward.");
@@ -58,10 +58,10 @@ public class DriveMotorTest extends LinearOpMode {
             bl.setPower(blOn ? POWER : 0);
             br.setPower(brOn ? POWER : 0);
 
-            telemetry.addData("LB front-left ", "%s %s", c.leftFrontMotorName, flOn ? "ON" : "");
-            telemetry.addData("RB front-right", "%s %s", c.rightFrontMotorName, frOn ? "ON" : "");
-            telemetry.addData("LT back-left  ", "%s %s", c.leftRearMotorName, blOn ? "ON" : "");
-            telemetry.addData("RT back-right ", "%s %s", c.rightRearMotorName, brOn ? "ON" : "");
+            telemetry.addData("LB front-left ", "%s %s", c.frontLeftName.get(), flOn ? "ON" : "");
+            telemetry.addData("RB front-right", "%s %s", c.frontRightName.get(), frOn ? "ON" : "");
+            telemetry.addData("LT back-left  ", "%s %s", c.backLeftName.get(), blOn ? "ON" : "");
+            telemetry.addData("RT back-right ", "%s %s", c.backRightName.get(), brOn ? "ON" : "");
             telemetry.update();
         }
     }

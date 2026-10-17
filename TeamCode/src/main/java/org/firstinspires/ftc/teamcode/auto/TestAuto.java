@@ -34,10 +34,12 @@ public class TestAuto extends LinearOpMode {
     public void runOpMode() {
         Scheduler.reset();                      // MANDATORY — the Scheduler's state is static
 
-        if (!Constants.LOCALIZER_INSTALLED) {
-            // On StubLocalizer the pose never moves, so each leg would drive at full power until
-            // its 5 s timeout. Refuse rather than crash, so the reason is on the Driver Station.
-            telemetry.addLine("Disabled: no localizer installed (Constants.LOCALIZER_INSTALLED).");
+        if (!Constants.canFollowPaths()) {
+            // On StubLocalizer the pose never moves, and before AutoTune there is no Foresight
+            // to follow with. Refuse rather than crash, so the reason is on the Driver Station.
+            telemetry.addLine(!Constants.LOCALIZER_INSTALLED
+                    ? "Disabled: no localizer installed (Constants.LOCALIZER_INSTALLED)."
+                    : "Disabled: Foresight not tuned yet — run AutoTune (Constants.FORESIGHT_TUNED).");
             telemetry.update();
             waitForStart();
             return;
@@ -46,8 +48,8 @@ public class TestAuto extends LinearOpMode {
         Robot robot = Robot.fromHardwareMap(hardwareMap)
                 .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry())
                 .withStatus(this::status);
-        TestPaths paths = new TestPaths(robot.follower);
-        robot.follower.setStartingPose(TestPaths.START);
+        TestPaths paths = new TestPaths();
+        robot.follower.setPose(TestPaths.START);
 
         // Failure containment (§8.4): the routine ends on whichever comes first — finishing,
         // the global deadline, or losing localization.

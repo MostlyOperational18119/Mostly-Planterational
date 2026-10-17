@@ -26,7 +26,7 @@ public class TestRoutinesTest {
     @Before
     public void setUp() {
         sim = new SimRobot(TestPaths.START);
-        paths = new TestPaths(sim.follower);
+        paths = new TestPaths();
     }
 
     @Test
@@ -40,7 +40,7 @@ public class TestRoutinesTest {
         // Either leg timing out takes LEG_TIMEOUT_MS (5 s) on its own, so finishing well inside
         // that proves both paths completed rather than being cut off.
         assertTrue("took " + seconds + " s", seconds < 4.5);
-        assertTrue(sim.pose().distanceFrom(TestPaths.START) < 1.5);
+        assertTrue(sim.pose().distance(TestPaths.START) < 1.5);
         assertEquals(0.0, sim.intakeMotor.power(), 0.0);
     }
 
@@ -55,7 +55,7 @@ public class TestRoutinesTest {
             sim.cycle();
             double power = sim.robot.intake.power();
             if (power == Intake.COLLECT_POWER && Double.isNaN(xWhenCollectStarted)) {
-                xWhenCollectStarted = sim.pose().getX();
+                xWhenCollectStarted = sim.pose().x();
             }
             if (power == Intake.EJECT_POWER) ejectedWhileReturning = true;
         }

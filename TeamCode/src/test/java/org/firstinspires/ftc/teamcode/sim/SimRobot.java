@@ -1,7 +1,8 @@
 package org.firstinspires.ftc.teamcode.sim;
 
+import com.pedropathing.algorithm.Foresight;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 import com.pedropathing.ivy.Scheduler;
 
 import org.firstinspires.ftc.teamcode.Robot;
@@ -16,9 +17,10 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
 
 /**
- * The whole robot below the OpMode, with no Android: the real {@link Robot}, {@link Follower}
- * (with the team's {@link Constants}), subsystems and Scheduler, over a simulated drivetrain,
- * localizer and motors. Tier 2 of the Testing section of CLAUDE.md.
+ * The whole robot below the OpMode, with no Android: the real {@link Robot}, {@link Follower},
+ * Foresight, subsystems and Scheduler, over a simulated drivetrain, localizer and motors.
+ * Tier 2 of the Testing section of CLAUDE.md. Foresight runs on {@link SimForesight}'s
+ * config, not {@link Constants}' — the team's is empty until AutoTune has run.
  *
  * <p>Resets the static Scheduler on construction — one {@code SimRobot} per test.
  */
@@ -38,12 +40,11 @@ public final class SimRobot {
 
     public SimRobot(Pose start) {
         Scheduler.reset();
-        follower = new Follower(Constants.followerConstants, localizer, drivetrain,
-                Constants.pathConstraints);
+        follower = new Follower(localizer, drivetrain, new Foresight(SimForesight.config()));
         robot = new Robot(HubManager.NONE, follower, new Intake(intakeMotor.motor),
                 new Transfer(transferMotor.motor), new Outtake(outtakeMotor.motor),
                 new Vision(camera));
-        follower.setStartingPose(start);
+        follower.setPose(start);
         follower.update();                  // as the OpModes do between init and the loop
     }
 
@@ -68,6 +69,6 @@ public final class SimRobot {
     }
 
     public Pose pose() {
-        return follower.getPose();
+        return follower.pose();
     }
 }

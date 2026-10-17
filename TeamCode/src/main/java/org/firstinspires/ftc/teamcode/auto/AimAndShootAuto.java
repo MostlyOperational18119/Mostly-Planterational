@@ -1,7 +1,7 @@
 package org.firstinspires.ftc.teamcode.auto;
 
 import com.bylazar.telemetry.PanelsTelemetry;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.ivy.groups.Groups;
@@ -37,7 +37,7 @@ public class AimAndShootAuto extends LinearOpMode {
         Robot robot = Robot.fromHardwareMap(hardwareMap)
                 .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry());
         robot.withStatus(() -> status(robot));
-        robot.follower.setStartingPose(new Pose());
+        robot.follower.setPose(Pose.zero());
 
         while (opModeInInit()) {
             if (gamepad1.x) alliance = Alliance.BLUE;

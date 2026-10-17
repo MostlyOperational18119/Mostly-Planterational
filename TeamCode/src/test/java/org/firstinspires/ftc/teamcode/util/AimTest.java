@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.util;
 
 import static org.junit.Assert.assertEquals;
 
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 import org.junit.Test;
 

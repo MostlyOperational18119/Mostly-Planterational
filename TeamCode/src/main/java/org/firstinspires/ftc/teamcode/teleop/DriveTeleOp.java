@@ -1,7 +1,7 @@
 package org.firstinspires.ftc.teamcode.teleop;
 
 import com.bylazar.telemetry.PanelsTelemetry;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.ivy.groups.Groups;
@@ -10,6 +10,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.Robot;
 import org.firstinspires.ftc.teamcode.field.Alliance;
+import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.util.AimController;
 import org.firstinspires.ftc.teamcode.util.Timeouts;
 
@@ -48,7 +49,7 @@ public class DriveTeleOp extends LinearOpMode {
         Robot robot = Robot.fromHardwareMap(hardwareMap)
                 .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry());
         robot.withStatus(() -> status(robot));
-        robot.follower.setStartingPose(new Pose());
+        robot.follower.setPose(Pose.zero());
 
         // Built once, before the match: it reads the gamepad through suppliers each cycle.
         Command driverControl = robot.drive.teleopDrive(
@@ -77,7 +78,9 @@ public class DriveTeleOp extends LinearOpMode {
 
         while (opModeIsActive()) {
             // Gamepad-triggered scheduling is the TeleOp equivalent of a routine (§8.3).
-            if (gamepad1.aWasPressed()) {
+            // Needs Foresight to hold a heading; before AutoTune the snap would just freeze the
+            // drive for SNAP_TIMEOUT_MS.
+            if (gamepad1.aWasPressed() && Constants.canFollowPaths()) {
                 Timeouts.limit(robot.drive.turnTo(0), SNAP_TIMEOUT_MS).schedule();
             }
             // Eject first: on its release it cancels before collect reschedules, so letting go
