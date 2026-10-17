@@ -1,5 +1,8 @@
 package org.firstinspires.ftc.teamcode.pedroPathing;
 
+import com.pedropathing.algorithm.Foresight;
+import com.pedropathing.revhub.drivetrains.Mecanum;
+import com.pedropathing.revhub.localizers.PinpointLocalizer;
 import com.pedropathing.tuning.autotune.Procedure;
 import com.pedropathing.tuning.autotune.Tuner;
 
@@ -45,11 +48,8 @@ public final class Tuning {
         return new ForesightTuner(Constants::createLocalizer, Constants::createDrivetrain);
     }
 
-    @Tuner(name = "Tests")
-    static Procedure tests() {
-        // No algorithm until Foresight is tuned: the path tests then refuse with a message,
-        // while the localization and driving tests still run.
-        return new Tests(Constants::createDrivetrain, Constants::createLocalizer,
-                Constants.FORESIGHT_TUNED ? Constants::createAlgorithm : null);
+    @Tuner
+    public static Procedure tests() {
+        return new Tests(hardwareMap -> new Mecanum(hardwareMap, Constants.drivetrainConfig), (hardwareMap -> new PinpointLocalizer(hardwareMap, Constants.localizerConfig)), () -> new Foresight(Constants.foresightConfig));
     }
 }
