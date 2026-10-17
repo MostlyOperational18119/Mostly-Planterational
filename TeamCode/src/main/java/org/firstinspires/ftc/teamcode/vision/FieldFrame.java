@@ -1,6 +1,6 @@
 package org.firstinspires.ftc.teamcode.vision;
 
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 /**
  * Converts between the FTC field frame the Limelight reports in and Pedro's frame.
@@ -10,10 +10,10 @@ import com.pedropathing.geometry.Pose;
  *   <li><b>Pedro</b>: origin at a field corner (field is 0–144 in), inches, radians.</li>
  * </ul>
  *
- * <p>The mapping is the one Pedro's {@code FTCCoordinates.convertToPedro} applies — rotate
- * −90°, then shift the origin by (72, 72). It is reimplemented here because Pedro 2.1.2's
- * {@code convertFromPedro} also rotates by −90° (so the pair is not inverse), and Pedro never
- * calls either, so neither direction is exercised upstream.
+ * <p>The mapping is the one Pedro 2's {@code FTCCoordinates.convertToPedro} applied — rotate
+ * −90°, then shift the origin by (72, 72). It was reimplemented here because Pedro 2.1.2's
+ * {@code convertFromPedro} also rotated by −90° (so the pair was not inverse); Pedro 3 has no
+ * FTC-frame conversion at all.
  *
  * <p><b>Unverified on a field.</b> Before trusting it: park the robot at a measured spot facing
  * a known direction and compare {@code vision.fieldPose()} with the tape measure. If the axes
@@ -30,18 +30,18 @@ public final class FieldFrame {
     public static Pose toPedro(double xMeters, double yMeters, double yawDegrees) {
         double x = xMeters * METERS_TO_INCHES;
         double y = yMeters * METERS_TO_INCHES;
-        return new Pose(y + HALF_FIELD_IN, -x + HALF_FIELD_IN,
-                wrap(Math.toRadians(yawDegrees) - Math.PI / 2));
+        // Pose normalises the heading to [0, 2π) itself.
+        return new Pose(y + HALF_FIELD_IN, -x + HALF_FIELD_IN, Math.toRadians(yawDegrees) - Math.PI / 2);
     }
 
     /** Inverse of {@link #toPedro}: {@code {xMeters, yMeters, yawDegrees}}. */
     public static double[] toFtc(Pose pedro) {
-        double xIn = HALF_FIELD_IN - pedro.getY();
-        double yIn = pedro.getX() - HALF_FIELD_IN;
+        double xIn = HALF_FIELD_IN - pedro.y();
+        double yIn = pedro.x() - HALF_FIELD_IN;
         return new double[] {
                 xIn / METERS_TO_INCHES,
                 yIn / METERS_TO_INCHES,
-                Math.toDegrees(wrap(pedro.getHeading() + Math.PI / 2))
+                Math.toDegrees(wrap(pedro.heading() + Math.PI / 2))
         };
     }
 

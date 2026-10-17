@@ -2,6 +2,7 @@ repositories {
     mavenCentral()
     google() // Needed for androidx
     maven { url = "https://mymaven.bylazar.com/releases" }
+    maven { url = "https://repo.dairy.foundation/releases" } // Sloth, needed by Pedro's AutoTune
 }
 
 dependencies {
@@ -15,10 +16,10 @@ dependencies {
     implementation 'org.firstinspires.ftc:Vision:12.0.0'
     implementation 'androidx.appcompat:appcompat:1.2.0'
 
-    implementation 'com.pedropathing:ftc:2.1.2'
-    implementation 'com.pedropathing:telemetry:1.0.0'
+    implementation 'com.pedropathing:revhub:3.0.2'   // brings com.pedropathing:core
+    implementation 'com.pedropathing:tuning:1.0.2'   // AutoTune: robot-hosted tuning webpage
     implementation 'com.bylazar:fullpanels:1.0.12'
 
-    implementation 'com.pedropathing:ivy:1.0.0'
+    implementation 'com.pedropathing.ivy:core:1.1.1'  // Pedro-independent; its PedroCommands module is not used
 }
 

@@ -2,7 +2,17 @@
 
 **Team:** BIOBUZZ · **Season:** FTC 2026–27 · **Status:** every §10 step has code; on-robot
 verification is outstanding — see CLAUDE.md for what each step still needs
-**Targets:** `com.pedropathing:ivy:1.0.0`, `com.pedropathing:ftc:2.1.2`, FTC SDK 12.0
+**Targets:** `com.pedropathing.ivy:core:1.1.1`, `com.pedropathing:revhub:3.0.2` (Pedro 3), FTC SDK 12.0
+
+> **Pedro 3 note.** This document was written against Pedro 2.1.2 and Ivy 1.0.0, and its code
+> sketches use Pedro 2 names (`PathChain`, `followPath`, `holdPoint`, `breakFollowing`,
+> `getPose()`). The design is unchanged; the API is not. In Pedro 3 the follower's
+> `follow`/`hold`/`manual`/`stop` are pure mode changes with no hardware I/O, so `Drive` stops
+> the follower directly in a command's `end()` instead of deferring `breakFollowing()` to
+> `write()`, and the `Mecanum` drivetrain gates its own writes. Ivy 1.1's core is 1.0.0's
+> apart from `Commands.waitMs`; its separate `PedroCommands` module still has the
+> requirement/`end()` gaps in §2.1 and is not used — `Drive` implements `follow`/`turnTo`/`hold`.
+> CLAUDE.md describes what is built.
 
 ---
 
@@ -85,6 +95,10 @@ Consequences we build on:
   design around. It is worth not scheduling hundreds of commands.
 
 ### 2.1 Verified caveats in Ivy 1.0.0
+
+> Rows about `PedroCommands`, `Follow`, `Hold` and `Turn` are Pedro 2 history — kept because
+> Ivy 1.1's `PedroCommands` repeats the missing requirements and `end()`. The rest still apply
+> to Ivy 1.1.1, whose core is unchanged apart from `waitMs`.
 
 These are real behaviours of the released library, confirmed in source. Code written
 against this design must account for them.
