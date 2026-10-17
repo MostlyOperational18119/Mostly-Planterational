@@ -36,7 +36,7 @@ public class Transfer implements Subsystem {
      * REVERSE so that {@link #feed()} is a positive power. Flip this, not the power signs, if
      * the transfer runs backwards.
      */
-    private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.REVERSE;
+    private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.FORWARD;
 
     public static final double FEED_POWER = 0.6;
     public static final double REVERSE_POWER = -0.6;
