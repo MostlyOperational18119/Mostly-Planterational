@@ -162,7 +162,7 @@ public class Robot {
         read();
         long t1 = System.nanoTime();
         follower.update();
-        headings.record(System.currentTimeMillis(), follower.getPose().getHeading());
+        headings.record(System.currentTimeMillis(), follower.pose().heading());
         long t2 = System.nanoTime();
         Scheduler.execute();
         long t3 = System.nanoTime();
@@ -220,7 +220,7 @@ public class Robot {
         if (Double.isNaN(measured)) return measured;
         double atCapture = headings.headingAt(vision.captureTimeMs());
         if (Double.isNaN(atCapture)) return measured;
-        double turnedSince = HeadingHistory.wrap(follower.getPose().getHeading() - atCapture);
+        double turnedSince = HeadingHistory.wrap(follower.pose().heading() - atCapture);
         return HeadingHistory.wrap(measured - turnedSince);
     }
 }

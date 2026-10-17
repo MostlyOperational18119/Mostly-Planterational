@@ -1,68 +1,109 @@
 package org.firstinspires.ftc.teamcode.pedroPathing;
 
+import com.pedropathing.algorithm.Algorithm;
+import com.pedropathing.algorithm.Foresight;
+import com.pedropathing.algorithm.ForesightConfig;
+import com.pedropathing.drivetrain.Drivetrain;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.follower.FollowerConstants;
-import com.pedropathing.ftc.FollowerBuilder;
-import com.pedropathing.ftc.drivetrains.MecanumConstants;
-import com.pedropathing.ftc.localization.constants.PinpointConstants;
-import com.pedropathing.paths.PathConstraints;
+import com.pedropathing.localization.Localizer;
+import com.pedropathing.revhub.drivetrains.Mecanum;
+import com.pedropathing.revhub.drivetrains.MecanumConfig;
+import com.pedropathing.revhub.localizers.PinpointConfig;
+import com.pedropathing.revhub.localizers.PinpointLocalizer;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+
+/**
+ * Pedro Pathing 3 configuration. A {@link Follower} is three parts — a localizer, a drivetrain
+ * and a path-following algorithm (Foresight) — each with its own config below. AutoTune
+ * ({@link Tuning}) measures all three and prints the Java to paste back here.
+ */
 public class Constants {
 
     /**
      * Whether the goBILDA Pinpoint and its dead wheels are on the chassis. True: the follower
-     * localizes with {@link #localizerConstants}. False (a chassis without pods, or the
-     * Pinpoint unplugged for a test): it runs on {@link StubLocalizer}, robot-centric TeleOp
-     * still works, and every OpMode that follows a path or needs a real pose (autos, Pedro's
-     * {@code Tuning}) refuses to start.
+     * localizes with {@link #localizerConfig}. False (a chassis without pods, or the Pinpoint
+     * unplugged for a test): it runs on {@link StubLocalizer}, robot-centric TeleOp still
+     * works, and every OpMode that needs a real pose refuses to start.
      */
     public static final boolean LOCALIZER_INSTALLED = true;
 
-    public static FollowerConstants followerConstants = new FollowerConstants();
+    /**
+     * Whether {@link #foresightConfig} holds AutoTune's measurements. Foresight cannot even be
+     * constructed without them, so while this is false the follower runs on
+     * {@link UntunedAlgorithm}: TeleOp driving, hold-to-aim and the AutoTune pages work; path
+     * following, {@code turnTo}/{@code hold} and {@code TestAuto} do not. Flip it once the
+     * ForesightTuner's output is pasted into {@link #foresightConfig}.
+     */
+    public static final boolean FORESIGHT_TUNED = false;
+
+    /** True when paths, {@code turnTo} and {@code hold} can work. */
+    public static boolean canFollowPaths() {
+        return LOCALIZER_INSTALLED && FORESIGHT_TUNED;
+    }
 
     // Names from the robot configuration. Directions verified on the robot (right side
-    // reversed); if pushing forward spins a wheel backwards, flip that wheel here.
-    public static MecanumConstants driveConstants = new MecanumConstants()
-            .leftFrontMotorName("motorFL")
-            .leftRearMotorName("motorBL")
-            .rightFrontMotorName("motorFR")
-            .rightRearMotorName("motorBR")
-            .leftFrontMotorDirection(DcMotorSimple.Direction.FORWARD)
-            .leftRearMotorDirection(DcMotorSimple.Direction.FORWARD)
-            .rightFrontMotorDirection(DcMotorSimple.Direction.REVERSE)
-            .rightRearMotorDirection(DcMotorSimple.Direction.REVERSE);
+    // reversed); if pushing forward spins a wheel backwards, flip that wheel here. AutoTune's
+    // Mecanum Tuner checks them interactively.
+    public static MecanumConfig drivetrainConfig = new MecanumConfig(c -> {
+        c.frontLeftName.set("motorFL");
+        c.backLeftName.set("motorBL");
+        c.frontRightName.set("motorFR");
+        c.backRightName.set("motorBR");
+        c.frontLeftDirection.set(DcMotorSimple.Direction.FORWARD);
+        c.backLeftDirection.set(DcMotorSimple.Direction.FORWARD);
+        c.frontRightDirection.set(DcMotorSimple.Direction.REVERSE);
+        c.backRightDirection.set(DcMotorSimple.Direction.REVERSE);
+    });
 
     /**
      * goBILDA Pinpoint Odometry Computer, I2C device {@code "pinpoint"}, two goBILDA 4-Bar pods.
      *
      * <p>Offsets are the Pinpoint's convention, measured from the centre of rotation: the
-     * forward pod's <em>sideways</em> offset (left +) and the strafe pod's <em>fore/aft</em>
-     * offset (forward +). Measured: forward pod 3 in right of centre, strafe pod on the
-     * centreline fore/aft.
+     * x (forward-measuring) pod's <em>sideways</em> offset, left +, and the y (strafe-measuring)
+     * pod's <em>fore/aft</em> offset, forward +. Measured: forward pod 3 in right of centre,
+     * strafe pod on the centreline fore/aft. Directions as verified in Pedro 2's Localization
+     * Test. AutoTune's Pinpoint Tuner re-measures all four.
      *
-     * <p>Encoder directions are Pedro's defaults, <b>unverified</b>: in Tuning → Localization
-     * Test, push the robot forward (x must rise) and to the left (y must rise); flip whichever
-     * is backwards. Then spin it in place — if x/y drift while only turning, the offsets are off.
+     * <p>Constructing the localizer recalibrates the Pinpoint's IMU and sleeps 500 ms — init
+     * only, and the robot must be still.
      */
-    public static PinpointConstants localizerConstants = new PinpointConstants()
-            .hardwareMapName("pinpoint")
-            .encoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD)
-            .forwardPodY(-3)
-            .strafePodX(0)
-            .forwardEncoderDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD)
-            .strafeEncoderDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
+    public static PinpointConfig localizerConfig = new PinpointConfig(c -> {
+        c.name.set("pinpoint");
+        c.podType.set(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
+        c.xPodOffset.set(-3.0);
+        c.yPodOffset.set(0.0);
+        c.xPodDirection.set(GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        c.yPodDirection.set(GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        c.globalDistanceUnit.set(DistanceUnit.INCH);
+        c.offsetUnits.set(DistanceUnit.INCH);
+    });
 
-    public static PathConstraints pathConstraints = new PathConstraints(0.99, 100, 1, 1);
+    /**
+     * Foresight, Pedro 3's path follower. <b>Empty until AutoTune has run</b>: paste the
+     * ForesightTuner's generated block here, then set {@link #FORESIGHT_TUNED}.
+     */
+    public static ForesightConfig foresightConfig = new ForesightConfig(c -> {
+    });
+
+    public static Drivetrain createDrivetrain(HardwareMap hardwareMap) {
+        return new Mecanum(hardwareMap, drivetrainConfig);
+    }
+
+    public static Localizer createLocalizer(HardwareMap hardwareMap) {
+        return LOCALIZER_INSTALLED ? new PinpointLocalizer(hardwareMap, localizerConfig)
+                : new StubLocalizer();
+    }
+
+    public static Algorithm createAlgorithm() {
+        return FORESIGHT_TUNED ? new Foresight(foresightConfig) : new UntunedAlgorithm();
+    }
 
     public static Follower createFollower(HardwareMap hardwareMap) {
-        FollowerBuilder builder = new FollowerBuilder(followerConstants, hardwareMap)
-                .mecanumDrivetrain(driveConstants)
-                .pathConstraints(pathConstraints);
-        if (LOCALIZER_INSTALLED) builder.pinpointLocalizer(localizerConstants);
-        else builder.setLocalizer(new StubLocalizer());
-        return builder.build();
+        return new Follower(createLocalizer(hardwareMap), createDrivetrain(hardwareMap),
+                createAlgorithm());
     }
 }

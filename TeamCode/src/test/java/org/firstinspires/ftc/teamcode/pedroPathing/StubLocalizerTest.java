@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 import com.pedropathing.ivy.Scheduler;
 
 import org.firstinspires.ftc.teamcode.Robot;
@@ -29,12 +29,12 @@ public class StubLocalizerTest {
     @Before
     public void setUp() {
         Scheduler.reset();
-        Follower follower = new Follower(Constants.followerConstants, new StubLocalizer(),
-                drivetrain, Constants.pathConstraints);
+        // As on the robot before AutoTune: no Foresight, which manual driving never consults.
+        Follower follower = new Follower(new StubLocalizer(), drivetrain, new UntunedAlgorithm());
         robot = new Robot(HubManager.NONE, follower, new Intake(new FakeMotor().motor),
                 new Transfer(new FakeMotor().motor), new Outtake(new FakeMotor().motor),
                 new Vision(VisionSource.NONE));
-        follower.setStartingPose(new Pose());
+        follower.setPose(Pose.zero());
         follower.update();
         robot.drive.teleopDrive(() -> forward, () -> strafe, () -> turn, true).schedule();
     }
@@ -47,7 +47,7 @@ public class StubLocalizerTest {
     public void forwardStickDrivesForward() {
         forward = 0.5;
         cycles(3);
-        assertTrue(drivetrain.teleopStarted());
+        assertTrue(drivetrain.manual());
         assertTrue(drivetrain.vx() > 0);
         assertEquals(0, drivetrain.vy(), 1e-9);
         assertEquals(0, drivetrain.omega(), 1e-9);

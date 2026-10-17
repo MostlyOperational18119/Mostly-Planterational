@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 import com.pedropathing.ivy.Command;
 
 import org.firstinspires.ftc.teamcode.sim.SimRobot;
@@ -35,8 +35,8 @@ public class ShootingRoutinesTest {
     /** The error to a fixed field point, from the simulated pose. */
     private double aimErrorTo(double targetX, double targetY) {
         Pose p = sim.pose();
-        double dx = targetX - p.getX(), dy = targetY - p.getY();
-        double h = p.getHeading();
+        double dx = targetX - p.x(), dy = targetY - p.y();
+        double h = p.heading();
         double x = dx * Math.cos(h) + dy * Math.sin(h);     // into the robot frame
         double y = -dx * Math.sin(h) + dy * Math.cos(h);
         return AimController.error(x, y);
@@ -61,9 +61,9 @@ public class ShootingRoutinesTest {
         sim.cycle();
         assertEquals(0.0, sim.transferMotor.power(), 0.0);
         assertEquals(0.0, sim.outtakeMotor.power(), 0.0);
-        double heading = sim.pose().getHeading();
+        double heading = sim.pose().heading();
         sim.cycles(20);
-        assertEquals("drive must stop turning once released", heading, sim.pose().getHeading(), 1e-3);
+        assertEquals("drive must stop turning once released", heading, sim.pose().heading(), 1e-3);
     }
 
     @Test
@@ -78,7 +78,7 @@ public class ShootingRoutinesTest {
         double ms = (System.nanoTime() - start) / 1e6;
         assertTrue("finished before the aim timeout: " + ms, ms >= 300);
         assertTrue(fed());
-        assertEquals("nothing to aim at, so no turning", 0, sim.pose().getHeading(), 1e-3);
+        assertEquals("nothing to aim at, so no turning", 0, sim.pose().heading(), 1e-3);
     }
 
     @Test

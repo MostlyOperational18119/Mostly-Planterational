@@ -38,21 +38,23 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     Aim.java — bearing / turn / distance to a goal, pure math
 │                     HeadingHistory.java — wall-clock-keyed headings for latency correction
 │                     AimController.java — chassis aim law (P + kS, capped), Panels-tunable
-├── pedroPathing/     Constants.java (FollowerConstants, MecanumConstants, PathConstraints,
-│                     createFollower, LOCALIZER_INSTALLED)
-│                     StubLocalizer.java — fixed pose, for the chassis without odometry
-│                     Tuning.java (Pedro's tuning OpModes; refuses to run without a localizer)
+├── pedroPathing/     Constants.java — Pedro 3 configs (drivetrainConfig, localizerConfig,
+│                     foresightConfig), createFollower, LOCALIZER_INSTALLED, FORESIGHT_TUNED
+│                     StubLocalizer.java — fixed pose, for a chassis without odometry
+│                     UntunedAlgorithm.java — stands in for Foresight until AutoTune has run
+│                     Tuning.java — @Tuner registrations for the AutoTune webpage
+│                     procedures/ — AutoTune procedures, copied unchanged from the Quickstart
 ├── routines/         TestRoutines.java — routine trees as static factories (§8.2)
 │                     ShootingRoutines.java — aimAndShoot: aim on vision, then feed
 ├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
 │                     AimAndShootAuto.java — "Test: Aim and Shoot", no localizer needed
-│                     TestPaths.java — its PathChains, built at init
+│                     TestPaths.java — its Paths, built at init
 └── teleop/           DriveTeleOp.java — driver control on the loop contract; hold-to-aim
-                      CommandTeleOpDemo.java — upstream Ivy + Pedro reference, not an OpMode
+                      DriveMotorTest.java — one drive motor at a time (disabled)
 
 TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 ├── sim/              SimRobot (real Robot + Follower over fakes), SimDrivetrain,
-│                     SimLocalizer, FakeMotor, FakeVisionSource
+│                     SimLocalizer, SimForesight, FakeMotor, FakeVisionSource
 ├── util/             tier 1: WriteGate, LoopTimer, Timeouts, Aim, AimController,
 │                     HeadingHistory
 ├── vision/           tier 1: FieldFrame, ClusterFit
@@ -70,7 +72,8 @@ architecture doc's implementation order (§10) has code; what is left needs the 
 - **Step 3:** the flywheel is the closed-loop subsystem, but `Outtake.TARGET_RPM` is 0
   (open loop) until someone measures it — the procedure is in `Outtake`'s Javadoc.
   `TICKS_PER_REV = 28` is inferred from goBILDA's geared variants, not verified.
-- **Step 5:** `TestAuto` needs Pedro tuned first; real routines also need field coordinates.
+- **Step 5:** `TestAuto` needs AutoTune run first (`Constants.FORESIGHT_TUNED`); real
+  routines also need field coordinates.
 - **Step 6:** `AimAndShootAuto` runs without odometry; `ShootingRoutines.AIM_TIMEOUT_MS` and
   `FEED_MS` are placeholders.
 - **Step 7:** the latency correction is live now the Pinpoint is in, but untested on the
@@ -78,37 +81,51 @@ architecture doc's implementation order (§10) has code; what is left needs the 
 
 ## Libraries
 
-Declared in `build.dependencies.gradle` (Maven repo `https://mymaven.bylazar.com/releases`):
+Declared in `build.dependencies.gradle` (Maven Central, plus `https://mymaven.bylazar.com/releases`
+for Panels and `https://repo.dairy.foundation/releases` for Sloth):
 
 | Dependency | Version | Purpose |
 |---|---|---|
-| `com.pedropathing:ftc` | 2.1.2 | **Pedro Pathing** — path following, localization, drivetrain |
-| `com.pedropathing:ivy` | 1.0.0 | **Ivy** — command/scheduler framework |
-| `com.pedropathing:telemetry` | 1.0.0 | Pedro telemetry |
+| `com.pedropathing:revhub` | 3.0.2 | **Pedro Pathing 3** — follower, Foresight, Mecanum, Pinpoint (brings `com.pedropathing:core`) |
+| `com.pedropathing:tuning` | 1.0.2 | **AutoTune** — robot-hosted tuning webpage (needs Sloth from `repo.dairy.foundation`) |
+| `com.pedropathing.ivy:core` | 1.1.1 | **Ivy** — command/scheduler framework |
 | `com.bylazar:fullpanels` | 1.0.12 | Panels dashboard (`PanelsTelemetry`) |
 
 ### Pedro Pathing
 
 Path-following and localization library used for both autonomous and TeleOp driving.
-Configured in `pedroPathing/Constants.java`; tuning OpModes are in `pedroPathing/Tuning.java`.
+**Version 3** — a ground-up rewrite of 2.x, not an upgrade: `com.pedropathing.math.Pose`
+(`x()`/`heading()`, heading normalised to [0, 2π)), `Path` built with
+`Paths.line(a, b).constant(h)`, and a `Follower(Localizer, Drivetrain, Algorithm)` driven by
+four mode changes — `follow`, `hold`, `manual`, `stop` — none of which touches hardware
+(motors are written in `follower.update()`). Configured in `pedroPathing/Constants.java`.
 
-Drive motors are `motorFL`/`motorFR`/`motorBL`/`motorBR` (Pedro `Mecanum`, directions
-verified on the robot). Localization is a **goBILDA Pinpoint** (I2C `"pinpoint"`, two 4-Bar
-pods; forward pod 3 in right of centre, strafe pod on the fore/aft centreline), configured
-in `Constants.localizerConstants`. Its encoder directions are Pedro's defaults and
-**unverified** — Tuning → Localization Test checks them first. **Pedro is not tuned yet**:
-`followerConstants` and `pathConstraints` are library defaults, so paths, `turnTo`/`hold`
-and `TestAuto` should not be trusted until the tuning OpModes have been run.
+Drive motors are `motorFL`/`motorFR`/`motorBL`/`motorBR` (`Mecanum`, directions verified on
+the robot; its `CachedMotor`s gate writes). Localization is a **goBILDA Pinpoint** (I2C
+`"pinpoint"`, two 4-Bar pods; forward pod 3 in right of centre, strafe pod on the fore/aft
+centreline, both directions FORWARD as verified on Pedro 2). Building the localizer
+recalibrates the Pinpoint IMU and sleeps 500 ms — init only, robot still.
 
-`Constants.LOCALIZER_INSTALLED` (now `true`) is kept as a switch: set `false` for a chassis
-without pods and the follower runs on `StubLocalizer` — robot-centric TeleOp works, and the
-guarded OpModes (`TestAuto`, `Tuning`) refuse to start, because on a frozen pose a path
-drives at full power until a timeout.
+**Tuning is AutoTune**, a webpage the Robot Controller hosts at
+`http://192.168.43.1:10158` (starts with the app; Panels stays on 8001). `Tuning.java`
+registers its procedures with `@Tuner`; each prints Java to paste into `Constants`. Order:
+Mecanum Tuner → Pinpoint Tuner → Foresight Tuner → Tests.
+
+**Foresight is not tuned yet**, and cannot even be constructed without the Foresight Tuner's
+measurements. So `Constants.FORESIGHT_TUNED = false` puts `UntunedAlgorithm` in its place:
+manual driving never consults the algorithm, so TeleOp, hold-to-aim, `AimAndShootAuto` and
+AutoTune all work; following/holding commands zero power and never arrives. `TestAuto` and
+the TeleOp A-button snap check `Constants.canFollowPaths()` and refuse. After pasting the
+tuner's output into `foresightConfig`, flip the flag.
+
+`Constants.LOCALIZER_INSTALLED` (now `true`) is the same kind of switch for odometry: `false`
+puts `StubLocalizer` in, for a chassis without pods.
 
 The Pinpoint is an I2C device, read inside `follower.update()` (phase 3) — the one I2C read
 the loop budget accepts. Check the `update` figure in `Robot.DEBUG_TIMING`'s phase line.
 
-Docs: <https://pedropathing.com/docs>
+Docs: <https://pedropathing.com/docs/pathing> ·
+[Quickstart](https://github.com/Pedro-Pathing/Quickstart) (source of `procedures/`)
 
 ### Limelight 3A (vision)
 
@@ -158,8 +175,8 @@ size 82.55 mm), and the camera's mounting entered in the Limelight UI so robot-s
 height above the floor. The camera must look **up** at the CELL undersides (clusters at
 roughly 34 and 49 in). **Unverified on hardware:** the Limelight robot-space y sign
 (`LimelightSource.LEFT_SIGN`) and the up-CELL height threshold — check both against a tape
-measure on a real HIVE. `FieldFrame` copies Pedro's `FTCCoordinates.convertToPedro` (whose
-inverse in 2.1.2 is wrong) and is also unverified.
+measure on a real HIVE. `FieldFrame` copies Pedro 2's `FTCCoordinates.convertToPedro` (Pedro 3
+has no FTC-frame conversion) and is also unverified.
 
 Docs: <https://docs.limelightvision.io/> ·
 [FTC setup](https://docs.limelightvision.io/docs/docs-limelight/getting-started/ftc)
@@ -176,8 +193,10 @@ Pedro's command framework (`com.pedropathing.ivy`) — commands, command groups,
 - `Scheduler` is **not thread-safe.** Never call `schedule()` / `cancel()` off the control
   thread (this matters for vision).
 - Composition: `Groups.sequential/parallel/race/deadline/repeat/loop`,
-  `Commands.instant/waitMs/waitUntil/infinite/branch/match/lazy`,
-  `PedroCommands.follow/hold/turnTo`.
+  `Commands.instant/waitMs/waitUntil/infinite/branch/match/lazy`.
+- Since 1.1.0 Ivy is split into `com.pedropathing.ivy:core` (Pedro-independent; what we use)
+  and `:pedro` (`PedroCommands`, for Pedro 3). Ivy 1.0.0 must not be used with Pedro 3: its
+  `Commands.waitMs` was built on Pedro 2's `Timer` and throws `NoClassDefFoundError`.
 - Requirements are `Set<Object>` (use the subsystem instance) with `priority()` plus
   `InterruptedBehavior` / `ConflictBehavior` / `BlockedBehavior`.
 
@@ -186,14 +205,12 @@ Docs: <https://pedropathing.com/docs/ivy>
 **Ivy has no subsystem abstraction and no periodic hook** — the read/compute/write runtime
 around it is ours to build. See the architecture doc.
 
-**Known bugs in Ivy 1.0.0** (verified in source — full list and mitigations in the
-architecture doc, §2.1):
-- `PedroCommands.follow/hold/turnTo` declare **no requirements** and **no `end()`**, so an
-  interrupted path keeps driving. Always go through `Drive`'s factories, never
-  `PedroCommands` directly.
-- `PedroCommands.turnTo` finishes after Pedro's 100 ms path-end timeout regardless of
-  heading, and `PedroCommands.hold` ignores the target pose's heading. `Drive.turnTo` /
-  `Drive.hold` are reimplemented on `holdPoint`.
+**Known bugs in Ivy 1.1.1** (verified in source; its core is 1.0.0's apart from `waitMs` —
+full list and mitigations in the architecture doc, §2.1):
+- `PedroCommands` (the `:pedro` module, not a dependency here) still declares **no
+  requirements** and **no `end()`**, has no `turnTo`, and `hold(follower)` captures the pose
+  when the command is *built*. `Drive` implements `follow`/`turnTo`/`hold` itself — always go
+  through `Drive`'s factories.
 - `Command.proxy()` has an inverted `done()` condition — don't use it.
 - `Sequential` starts its next step one cycle after the previous one ends (it checks
   `done()` before `execute()`); each nesting level of groups adds a cycle at boundaries.
@@ -207,7 +224,7 @@ subsystem, command, or OpMode code.
 It specifies the non-blocking loop contract, the `Subsystem`/`Robot` layering, latency
 budgets (bulk caching, write gating), how to overlap mechanism motion with path following,
 continuous background aiming, Limelight 3A integration and vision-latency correction, and the
-Ivy 1.0.0 caveats to work around.
+Ivy caveats to work around.
 
 The short version — these are hard rules for new code:
 
@@ -256,7 +273,7 @@ JVM unit test. Verified against the SDK 12.0 sources:
 | | Loads on a plain JVM? |
 |---|---|
 | `DcMotorEx`, `DcMotor`, `Servo`, `HardwareDevice`, `Telemetry` | **Yes** — plain interfaces, no `android.*` imports |
-| Pedro `core` (`Follower`, `Localizer`, `Drivetrain`, `Pose`, `PathChain`) and all of Ivy | **Yes** — ordinary Java jars |
+| Pedro `core` (`Follower`, `Localizer`, `Drivetrain`, `Pose`, `Path`, Foresight) and Ivy `core` | **Yes** — ordinary Java jars |
 | `HardwareMap` | No — requires an `android.content.Context` and `com.qualcomm.robotcore.R` |
 | `LynxModule` | No — concrete class over USB/RS-485 comms |
 | `LinearOpMode` / `OpMode` | No — extends `OpModeInternal`, needs the app's event loop |
@@ -287,9 +304,8 @@ These are deliberate choices in the shell, not accidents — keep them when addi
    `Timeouts`. These need nothing but JUnit.
 
 Point 4 plus point 1 turns out to be enough for real tests today. `Follower`'s public
-constructor takes `(FollowerConstants, Localizer, Drivetrain, PathConstraints)`, and
-`Localizer` is an interface while `Drivetrain` is an abstract class — both from Pedro's plain
-jar. A hand-written fake localizer and a recording drivetrain give a **simulated robot with no
+constructor takes `(Localizer, Drivetrain, Algorithm)` — all three interfaces from Pedro's
+plain `core` jar. A hand-written fake localizer and a recording drivetrain give a **simulated robot with no
 Android and no mocking framework at all.** This was confirmed by spiking it: the team code
 compiles with plain `javac`, and a headless harness scheduling `drive.teleopDrive(...)` and
 calling `robot.cycle()` in a loop drives the fake drivetrain, gets preempted by
@@ -315,9 +331,11 @@ How it is set up: JUnit 4.13.2, declared in `TeamCode/build.gradle` (not
 `build.common.gradle`, which stays upstream-pristine). No mocking framework —
 `sim/FakeMotor` fakes `DcMotorEx` with a `java.lang.reflect.Proxy`, and
 `returnDefaultValues` has not been needed. `SimLocalizer` integrates over **real** time
-because Pedro's PIDF derivative terms read the wall clock, so tier-2 tests take as long as
-the motion they simulate (a 24 in leg ≈ 1 s). The simulated drivetrain has no inertia: it
-proves routines terminate and hand the drivetrain over correctly, not that PIDF is tuned.
+because the follower times its own loop with `System.nanoTime()`, so tier-2 tests take as
+long as the motion they simulate (a 24 in leg ≈ 1 s). The sim runs the real Foresight on
+`SimForesight`'s config — numbers matched to the sim, not the robot. The simulated
+drivetrain has no inertia: it proves routines terminate and hand the drivetrain over
+correctly, not that Foresight is tuned.
 When adding a subsystem, give it an `XTest` beside `IntakeTest` and a `FakeMotor` in
 `SimRobot`. Still open: whether tier 3 is a stub SDK or Robolectric.
 

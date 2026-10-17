@@ -3,7 +3,7 @@ package org.firstinspires.ftc.teamcode;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 import org.firstinspires.ftc.teamcode.field.Alliance;
 import org.firstinspires.ftc.teamcode.field.Cell;
@@ -34,8 +34,8 @@ public class RobotTest {
 
         // Turn CCW while the camera reports nothing newer: the target is now to the right.
         sim.robot.drive.teleopDrive(() -> 0, () -> 0, () -> 0.5, true).schedule();
-        sim.cycleUntil(() -> sim.pose().getHeading() > 0.05, 80);
-        double turned = sim.pose().getHeading();
+        sim.cycleUntil(() -> sim.pose().heading() > 0.05, 80);
+        double turned = sim.pose().heading();
         assertTrue("sim did not turn within the frame's 100 ms life", turned > 0.05);
 
         assertEquals("raw vision does not know the robot moved",

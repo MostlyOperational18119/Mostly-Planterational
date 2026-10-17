@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.vision;
 
 import static org.junit.Assert.assertEquals;
 
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 import org.junit.Test;
 
@@ -13,18 +13,18 @@ public class FieldFrameTest {
     @Test
     public void fieldCentreIsPedroCentre() {
         Pose p = FieldFrame.toPedro(0, 0, 90);
-        assertEquals(72, p.getX(), EPS);
-        assertEquals(72, p.getY(), EPS);
-        assertEquals(0, p.getHeading(), EPS);
+        assertEquals(72, p.x(), EPS);
+        assertEquals(72, p.y(), EPS);
+        assertEquals(0, p.heading(), EPS);
     }
 
     @Test
     public void metresBecomeInchesAndAxesRotate() {
         // Pedro's convertToPedro: rotate −90°, so FTC +y → Pedro +x and FTC +x → Pedro −y.
         Pose p = FieldFrame.toPedro(0.0254, 0.0254 * 2, 0);
-        assertEquals(72 + 2, p.getX(), EPS);
-        assertEquals(72 - 1, p.getY(), EPS);
-        assertEquals(3 * Math.PI / 2, p.getHeading(), EPS);    // −90° wrapped to [0, 2π)
+        assertEquals(72 + 2, p.x(), EPS);
+        assertEquals(72 - 1, p.y(), EPS);
+        assertEquals(3 * Math.PI / 2, p.heading(), EPS);    // −90° wrapped to [0, 2π)
     }
 
     @Test
@@ -37,9 +37,9 @@ public class FieldFrameTest {
         assertEquals(ftc[2], back[2], EPS);
 
         Pose again = FieldFrame.toPedro(back[0], back[1], back[2]);
-        assertEquals(pedro.getX(), again.getX(), EPS);
-        assertEquals(pedro.getY(), again.getY(), EPS);
-        assertEquals(pedro.getHeading(), again.getHeading(), EPS);
+        assertEquals(pedro.x(), again.x(), EPS);
+        assertEquals(pedro.y(), again.y(), EPS);
+        assertEquals(pedro.heading(), again.heading(), EPS);
     }
 
     @Test
@@ -48,8 +48,8 @@ public class FieldFrameTest {
         for (double x : new double[] {-half, half}) {
             for (double y : new double[] {-half, half}) {
                 Pose p = FieldFrame.toPedro(x, y, 0);
-                assertEquals(0, Math.min(Math.abs(p.getX()), Math.abs(p.getX() - 144)), 1e-6);
-                assertEquals(0, Math.min(Math.abs(p.getY()), Math.abs(p.getY() - 144)), 1e-6);
+                assertEquals(0, Math.min(Math.abs(p.x()), Math.abs(p.x() - 144)), 1e-6);
+                assertEquals(0, Math.min(Math.abs(p.y()), Math.abs(p.y() - 144)), 1e-6);
             }
         }
     }
