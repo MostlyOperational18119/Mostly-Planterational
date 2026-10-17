@@ -18,13 +18,14 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── Robot.java        Subsystem registry + the loop contract (startCycle/read/update/
 │                     execute/write/telemetry). OpModes call robot.cycle().
 │                     aimError() — vision's aim corrected for the turn since capture;
+│                     shotDistance() — distance to the up CELL, last sighting held;
 │                     DEBUG_TIMING per-phase timing line
 ├── subsystems/       Drive.java — Pedro Follower wrapped as a requirable subsystem
 │                     Intake.java — one open-loop motor ("intake"), collect/eject/off
 │                     Transfer.java — open-loop motor ("transfer") lifting pollen into the
 │                     flywheel, feed/reverse/off
 │                     Outtake.java — flywheel ("outtake"), velocity control in write();
-│                     open loop until TARGET_RPM is set. spin/off, atSpeed/readyToFeed
+│                     SHOT_POINTS distance→rpm table. spin/spinFor/spinAt/off, atSpeed/readyToFeed
 │                     Vision.java — HIVE CELL clusters relative to the robot; which CELL is up
 ├── vision/           VisionSource (interface) / LimelightSource (the only Limelight3A user)
 │                     VisionSample — LLResult reduced to per-tag robot-frame positions
@@ -38,6 +39,7 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     Aim.java — bearing / turn / distance to a goal, pure math
 │                     HeadingHistory.java — wall-clock-keyed headings for latency correction
 │                     AimController.java — chassis aim law (P + kS, capped), Panels-tunable
+│                     ShotMap.java — launch speed by distance, interpolated measured table
 ├── pedroPathing/     Constants.java — Pedro 3 configs (drivetrainConfig, localizerConfig,
 │                     foresightConfig), createFollower, LOCALIZER_INSTALLED, FORESIGHT_TUNED
 │                     StubLocalizer.java — fixed pose, for a chassis without odometry
@@ -50,13 +52,14 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     AimAndShootAuto.java — "Test: Aim and Shoot", no localizer needed
 │                     TestPaths.java — its Paths, built at init
 └── teleop/           DriveTeleOp.java — driver control on the loop contract; hold-to-aim
+                      ShotCalibration.java — measures the flywheel, records SHOT_POINTS
                       DriveMotorTest.java — one drive motor at a time (disabled)
 
 TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 ├── sim/              SimRobot (real Robot + Follower over fakes), SimDrivetrain,
 │                     SimLocalizer, SimForesight, FakeMotor, FakeVisionSource
 ├── util/             tier 1: WriteGate, LoopTimer, Timeouts, Aim, AimController,
-│                     HeadingHistory
+│                     HeadingHistory, ShotMap
 ├── vision/           tier 1: FieldFrame, ClusterFit
 ├── field/            tier 1: CellTest (tag IDs against the manual)
 ├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest
@@ -69,9 +72,15 @@ architecture doc's implementation order (§10) has code; what is left needs the 
 
 - **Step 1:** the ≤ 6 ms median loop has never been measured on hardware. Turn on
   `Robot.DEBUG_TIMING` (Panels) for the per-phase breakdown.
-- **Step 3:** the flywheel is the closed-loop subsystem, but `Outtake.TARGET_RPM` is 0
-  (open loop) until someone measures it — the procedure is in `Outtake`'s Javadoc.
-  `TICKS_PER_REV = 28` is inferred from goBILDA's geared variants, not verified.
+- **Step 3:** the flywheel is the closed-loop subsystem. The hood is fixed, so the launch
+  speed is chosen by distance: `Outtake.spinFor` looks up `SHOT_POINTS` (a measured
+  distance→rpm table, interpolated, ends held) with the Limelight's distance to the up CELL
+  (`Robot.shotDistance`, last sighting held while out of view). Nothing is measured yet:
+  `TICKS_PER_REV = 28` is inferred, `KV` assumes 6000 rpm free speed, `SHOT_POINTS` is empty
+  and `TARGET_RPM` is 0 — so today it still runs open loop at `SPIN_POWER`. The
+  **"Calibrate: Flywheel and Shots"** OpMode (`ShotCalibration`) measures all of it, in the
+  order in `Outtake`'s Javadoc. Planned: a Pinpoint fallback for the distance once the HIVE's
+  field coordinates are known.
 - **Step 5:** Pedro is tuned, so `TestAuto` can run; its on-robot run (wall-clock time and
   loop period) is still to do. Real routines need this season's field coordinates.
 - **Step 6:** `AimAndShootAuto` runs without odometry; `ShootingRoutines.AIM_TIMEOUT_MS` and

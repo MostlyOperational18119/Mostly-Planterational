@@ -67,4 +67,20 @@ public class RobotTest {
             assertTrue(s, s.contains(phase));
         }
     }
+
+    @Test
+    public void shotDistanceHoldsTheLastSightingWhenTheCellDropsOutOfView() {
+        assertTrue("never seen: unknown", Double.isNaN(sim.robot.shotDistance(Alliance.RED)));
+
+        sim.camera.sample = new FakeVisionSource.Frame(System.currentTimeMillis(), 0)
+                .cluster(Cell.RED_FAR, 48, 36, 49).build();
+        sim.cycle();
+        assertEquals(60, sim.robot.shotDistance(Alliance.RED), 1e-6);
+        assertTrue("only red's CELL was seen", Double.isNaN(sim.robot.shotDistance(Alliance.BLUE)));
+
+        sim.camera.sample = null;       // tags out of view
+        sim.cycle();
+        assertTrue(Double.isNaN(sim.robot.vision.targetDistance(Alliance.RED)));
+        assertEquals("held from the last sighting", 60, sim.robot.shotDistance(Alliance.RED), 1e-6);
+    }
 }

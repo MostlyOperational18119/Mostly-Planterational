@@ -192,6 +192,16 @@ public class Vision implements Subsystem {
         return target == null ? Double.NaN : AimController.error(target.x, target.y);
     }
 
+    /**
+     * Floor distance to {@code alliance}'s up CELL's tag cluster, inches; NaN when that CELL is
+     * not in view. What the launch speed is chosen by ({@code Outtake.SHOT_POINTS}).
+     */
+    public double targetDistance(Alliance alliance) {
+        Cell up = upCell(alliance);
+        CellSighting target = up == null ? null : sighting(up);
+        return target == null ? Double.NaN : target.floorDistance();
+    }
+
     /** Wall-clock ms when the frame behind this cycle's sightings was captured (§7.4). */
     public long captureTimeMs() {
         return hasFix() ? sample.captureTimeMs() : Long.MIN_VALUE;

@@ -10,6 +10,7 @@ import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
 
 import org.firstinspires.ftc.teamcode.sim.FakeMotor;
+import org.firstinspires.ftc.teamcode.util.ShotMap;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -158,5 +159,76 @@ public class OuttakeTest {
         cycle();
         assertEquals(0.0, motor.power(), 0.0);
         assertFalse(outtake.atSpeed());
+    }
+
+    @Test
+    public void spinForFollowsTheShotMapAsTheDistanceChanges() {
+        Outtake mapped = new Outtake(motor.motor,
+                new ShotMap(new double[][] {{40, 2400}, {80, 3600}}));
+        double[] distance = {40};
+        mapped.spinFor(() -> distance[0]).schedule();
+        measure(2400);
+        mapped.read();
+        Scheduler.execute();
+        mapped.write();
+        assertEquals(2400, mapped.targetRpm(), 0.0);
+        assertTrue(mapped.atSpeed());
+        assertEquals("at speed, feedforward alone", Outtake.KV * 2400, motor.power(), 1e-9);
+
+        distance[0] = 60;               // drove back: the target moves with it, same command
+        mapped.read();
+        Scheduler.execute();
+        mapped.write();
+        assertEquals(3000, mapped.targetRpm(), 1e-9);
+        assertFalse("600 rpm short is not at speed", mapped.atSpeed());
+        assertFalse(mapped.readyToFeed());
+    }
+
+    @Test
+    public void spinForWithoutADistanceFallsBackToTargetRpmThenOpenLoop() {
+        Outtake mapped = new Outtake(motor.motor, new ShotMap(new double[][] {{40, 2400}}));
+        Command spin = mapped.spinFor(() -> Double.NaN);
+        spin.schedule();
+        mapped.read();
+        Scheduler.execute();
+        mapped.write();
+        assertEquals("no distance, no TARGET_RPM: open loop", Outtake.SPIN_POWER, motor.power(), 0.0);
+        assertEquals(0, mapped.targetRpm(), 0.0);
+        assertTrue(mapped.readyToFeed());
+
+        Outtake.TARGET_RPM = 3000;
+        mapped.read();
+        Scheduler.execute();
+        mapped.write();
+        assertEquals(3000, mapped.targetRpm(), 0.0);
+    }
+
+    @Test
+    public void anEmptyShotMapFallsBackToTargetRpm() {
+        Outtake.TARGET_RPM = 3000;
+        Outtake unmapped = new Outtake(motor.motor, new ShotMap(new double[][] {}));
+        assertEquals(3000, unmapped.rpmFor(55), 0.0);
+    }
+
+    @Test
+    public void spinAtReadsItsSupplierEveryCycle() {
+        double[] rpm = {3000};
+        outtake.spinAt(() -> rpm[0]).schedule();
+        cycle();
+        assertEquals(3000, outtake.targetRpm(), 0.0);
+        rpm[0] = 3300;
+        cycle();
+        assertEquals(3300, outtake.targetRpm(), 0.0);
+    }
+
+    @Test
+    public void endingSpinClearsTheTarget() {
+        Command spin = outtake.spinAt(() -> 3000);
+        spin.schedule();
+        cycle();
+        spin.cancel();
+        cycle();
+        assertEquals(0, outtake.targetRpm(), 0.0);
+        assertFalse(outtake.readyToFeed());
     }
 }

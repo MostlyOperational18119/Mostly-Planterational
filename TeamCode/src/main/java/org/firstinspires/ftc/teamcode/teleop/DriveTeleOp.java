@@ -28,7 +28,9 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
  *
  * <p>Intake: hold right bumper to collect, left bumper to eject (eject wins if both are held).
  * Launch: Y toggles the flywheel and the transfer together, so the transfer carries pollen
- * straight up into the spinning flywheel.
+ * straight up into the spinning flywheel. While it runs, the flywheel speed follows the
+ * distance to the alliance's up CELL ({@code Outtake.SHOT_POINTS}); before the CELL has been
+ * seen, or with no alliance chosen, it runs at {@code Outtake.TARGET_RPM}.
  *
  * <p>Aim: hold the right trigger to turn the robot onto your alliance's up CELL — there is no
  * turret, so the chassis aims the flywheel. The left stick still translates; with no target in
@@ -60,7 +62,8 @@ public class DriveTeleOp extends LinearOpMode {
         Command collect = robot.intake.collect();
         Command eject = robot.intake.eject();
         // One command over both requirements: toggling it starts and stops them together.
-        Command launch = Groups.parallel(robot.outtake.spin(), robot.transfer.feed());
+        Command launch = Groups.parallel(
+                robot.outtake.spinFor(() -> shotDistance(robot)), robot.transfer.feed());
         Command aim = robot.drive.aimedTeleopDrive(
                 () -> -gamepad1.left_stick_y,
                 () -> -gamepad1.left_stick_x,
@@ -101,13 +104,20 @@ public class DriveTeleOp extends LinearOpMode {
         return alliance == null ? Double.NaN : robot.aimError(alliance);
     }
 
+    private double shotDistance(Robot robot) {
+        return alliance == null ? Double.NaN : robot.shotDistance(alliance);
+    }
+
     private String status(Robot robot) {
         if (alliance == null) return "alliance: NOT SET (X blue, B red) — aiming disabled";
         double error = aimError(robot);
         String aim = Double.isNaN(error) ? "no target"
                 : AimController.onTarget(error) ? "ON TARGET"
                 : String.format("turn %+.1f°", Math.toDegrees(error));
-        return "alliance: " + alliance + " | aim: " + aim;
+        double distance = shotDistance(robot);
+        String range = Double.isNaN(distance) ? "not seen"
+                : String.format("%.1fin → %.0f rpm", distance, robot.outtake.rpmFor(distance));
+        return "alliance: " + alliance + " | aim: " + aim + " | range: " + range;
     }
 
     /** Edge-triggered binding: each press flips {@code command} between scheduled and not. */

@@ -59,6 +59,7 @@ import java.util.function.Supplier;
 public class Robot {
 
     private static final long TELEMETRY_PERIOD_NANOS = 100_000_000L;   // 10 Hz
+    private static final Alliance[] ALLIANCES = Alliance.values();
 
     /**
      * Adds a per-phase timing line (median / max of read, update, execute, write) to telemetry,
@@ -82,6 +83,7 @@ public class Robot {
     private final LoopTimer executeTimer = new LoopTimer();
     private final LoopTimer writeTimer = new LoopTimer();
     private final HeadingHistory headings = new HeadingHistory();
+    private final double[] lastShotDistance = {Double.NaN, Double.NaN};    // by Alliance ordinal
 
     private TelemetryManager telemetry;
     private Supplier<String> status;
@@ -117,7 +119,8 @@ public class Robot {
         return this;
     }
 
-    /** An OpMode-level line (routine state, timings), shown inside the 10 Hz throttle. */
+    /** OpMode-level lines (routine state, timings), shown inside the 10 Hz throttle; split on
+     *  {@code \n}. */
     public Robot withStatus(Supplier<String> status) {
         this.status = status;
         return this;
@@ -132,6 +135,10 @@ public class Robot {
     public void read() {
         // Indexed loops rather than enhanced-for: no Iterator allocation per phase per loop.
         for (int i = 0; i < subsystems.size(); i++) subsystems.get(i).read();
+        for (Alliance a : ALLIANCES) {
+            double d = vision.targetDistance(a);
+            if (!Double.isNaN(d)) lastShotDistance[a.ordinal()] = d;
+        }
     }
 
     public void write() {
@@ -147,7 +154,9 @@ public class Robot {
 
         telemetry.addLine(loopTimer.summary());
         if (DEBUG_TIMING) telemetry.addLine(phaseSummary());
-        if (status != null) telemetry.addLine(status.get());
+        if (status != null) {
+            for (String line : status.get().split("\n")) telemetry.addLine(line);
+        }
         for (int i = 0; i < subsystems.size(); i++) subsystems.get(i).telemetry(telemetry);
         telemetry.update();
     }
@@ -205,6 +214,20 @@ public class Robot {
     }
 
     // --- cross-subsystem queries: safe in phase 4 ---
+
+    /**
+     * Floor distance to {@code alliance}'s up CELL, inches, for choosing the launch speed: this
+     * cycle's {@link Vision#targetDistance} when the CELL is in view, otherwise the last one
+     * seen — so the flywheel holds its speed while the tags drop out of view mid-turn. NaN
+     * until the CELL has been seen at all.
+     *
+     * <p>Limelight only for now. The held value goes stale if the robot drives a long way
+     * without seeing the CELL; the planned fix is to fall back to the Pinpoint pose and the
+     * HIVE's field position, once this season's coordinates are in.
+     */
+    public double shotDistance(Alliance alliance) {
+        return lastShotDistance[alliance.ordinal()];
+    }
 
     /**
      * {@link Vision#aimError(Alliance)}, brought forward from when the frame was captured to

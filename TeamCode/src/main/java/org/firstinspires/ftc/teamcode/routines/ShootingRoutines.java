@@ -34,13 +34,17 @@ public final class ShootingRoutines {
 
     private ShootingRoutines() {}
 
-    /** {@link #aimAndShoot(Robot, DoubleSupplier)} at {@code alliance}'s up CELL. */
+    /**
+     * {@link #aimAndShoot(Robot, DoubleSupplier, DoubleSupplier)} at {@code alliance}'s up CELL,
+     * launch speed by its distance.
+     */
     public static Command aimAndShoot(Robot r, Alliance alliance) {
-        return aimAndShoot(r, () -> r.aimError(alliance));
+        return aimAndShoot(r, () -> r.aimError(alliance), () -> r.shotDistance(alliance));
     }
 
     /**
-     * Turns onto the target, then feeds into the flywheel for {@link #FEED_MS}.
+     * Turns onto the target, then feeds into the flywheel for {@link #FEED_MS}. The flywheel
+     * runs at the speed for {@code distanceIn} ({@code Outtake.spinFor}), re-read every cycle.
      *
      * <p>The flywheel spins up and the aim holds for the <em>whole</em> routine — both are
      * {@code deadline} members — so spin-up overlaps aiming, and the robot keeps correcting
@@ -53,8 +57,9 @@ public final class ShootingRoutines {
      * throws pollen at the wrong place.
      *
      * @param aimError radians to turn, CCW positive, NaN with no target
+     * @param distanceIn floor distance to the target, inches, NaN when unknown
      */
-    public static Command aimAndShoot(Robot r, DoubleSupplier aimError) {
+    public static Command aimAndShoot(Robot r, DoubleSupplier aimError, DoubleSupplier distanceIn) {
         return Groups.deadline(
                 Groups.sequential(
                         Timeouts.limit(Commands.waitUntil(() ->
@@ -62,7 +67,7 @@ public final class ShootingRoutines {
                                         && r.outtake.readyToFeed()), AIM_TIMEOUT_MS),
                         Timeouts.limit(r.transfer.feed(), FEED_MS)
                 ),
-                r.outtake.spin(),
+                r.outtake.spinFor(distanceIn),
                 r.drive.aimInPlace(aimError)
         );
     }

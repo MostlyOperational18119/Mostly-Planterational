@@ -50,7 +50,7 @@ public class ShootingRoutinesTest {
     public void aimsThenFeedsThenReleasesEverything() {
         ShootingRoutines.AIM_TIMEOUT_MS = 4000;
         ShootingRoutines.FEED_MS = 300;
-        Command routine = ShootingRoutines.aimAndShoot(sim.robot, () -> aimErrorTo(60, 40));
+        Command routine = ShootingRoutines.aimAndShoot(sim.robot, () -> aimErrorTo(60, 40), () -> Double.NaN);
         routine.schedule();
 
         assertTrue("never started feeding", sim.cycleUntil(sim.robot.transfer::running, 4000));
@@ -70,7 +70,7 @@ public class ShootingRoutinesTest {
     public void withNoTargetItStillShootsAfterTheAimTimeout() {
         ShootingRoutines.AIM_TIMEOUT_MS = 300;
         ShootingRoutines.FEED_MS = 200;
-        Command routine = ShootingRoutines.aimAndShoot(sim.robot, () -> Double.NaN);
+        Command routine = ShootingRoutines.aimAndShoot(sim.robot, () -> Double.NaN, () -> Double.NaN);
         routine.schedule();
         long start = System.nanoTime();
 
@@ -85,7 +85,7 @@ public class ShootingRoutinesTest {
     public void underVelocityControlItWaitsForTheFlywheel() {
         Outtake.TARGET_RPM = 3000;
         ShootingRoutines.AIM_TIMEOUT_MS = 5000;
-        Command routine = ShootingRoutines.aimAndShoot(sim.robot, () -> 0.0);
+        Command routine = ShootingRoutines.aimAndShoot(sim.robot, () -> 0.0, () -> Double.NaN);
         routine.schedule();
 
         sim.cycles(20);
