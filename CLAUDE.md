@@ -87,7 +87,7 @@ for Panels and `https://repo.dairy.foundation/releases` for Sloth):
 | Dependency | Version | Purpose |
 |---|---|---|
 | `com.pedropathing:revhub` | 3.0.2 | **Pedro Pathing 3** — follower, Foresight, Mecanum, Pinpoint (brings `com.pedropathing:core`) |
-| `com.pedropathing:tuning` | 1.0.2 | **AutoTune** — robot-hosted tuning webpage (needs Sloth from `repo.dairy.foundation`) |
+| `com.pedropathing:tuning` | 1.0.1 | **AutoTune** — robot-hosted tuning webpage (needs Sloth from `repo.dairy.foundation`). **Not 1.0.2**: its scanner NPEs on the first `@Tuner` (fatal Sloth scanning error); fixed in 1.0.3 |
 | `com.pedropathing.ivy:core` | 1.1.1 | **Ivy** — command/scheduler framework |
 | `com.bylazar:fullpanels` | 1.0.12 | Panels dashboard (`PanelsTelemetry`) |
 
