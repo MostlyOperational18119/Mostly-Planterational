@@ -70,11 +70,11 @@ architecture doc's implementation order (§10) has code; what is left needs the 
 - **Step 3:** the flywheel is the closed-loop subsystem, but `Outtake.TARGET_RPM` is 0
   (open loop) until someone measures it — the procedure is in `Outtake`'s Javadoc.
   `TICKS_PER_REV = 28` is inferred from goBILDA's geared variants, not verified.
-- **Step 5:** `TestAuto` needs the Pinpoint; real routines also need field coordinates.
+- **Step 5:** `TestAuto` needs Pedro tuned first; real routines also need field coordinates.
 - **Step 6:** `AimAndShootAuto` runs without odometry; `ShootingRoutines.AIM_TIMEOUT_MS` and
   `FEED_MS` are placeholders.
-- **Step 7:** the latency correction is wired in but does nothing until the Pinpoint is
-  installed — `StubLocalizer`'s heading never changes.
+- **Step 7:** the latency correction is live now the Pinpoint is in, but untested on the
+  robot; once it is, `AimController`'s gains can go up.
 
 ## Libraries
 
@@ -92,11 +92,21 @@ Declared in `build.dependencies.gradle` (Maven repo `https://mymaven.bylazar.com
 Path-following and localization library used for both autonomous and TeleOp driving.
 Configured in `pedroPathing/Constants.java`; tuning OpModes are in `pedroPathing/Tuning.java`.
 
-**Current chassis has no odometry.** Drive motors are `motorFL`/`motorFR`/`motorBL`/`motorBR`
-(Pedro `Mecanum`); the planned localizer is a goBILDA Pinpoint, not yet installed. Until it is,
-`Constants.LOCALIZER_INSTALLED = false` and the follower runs on `StubLocalizer`: robot-centric
-TeleOp works, while path following, `turnTo`/`hold`, autos and `Tuning` do not — the guarded
-ones refuse to start, because on a frozen pose a path drives at full power until a timeout.
+Drive motors are `motorFL`/`motorFR`/`motorBL`/`motorBR` (Pedro `Mecanum`, directions
+verified on the robot). Localization is a **goBILDA Pinpoint** (I2C `"pinpoint"`, two 4-Bar
+pods; forward pod 3 in right of centre, strafe pod on the fore/aft centreline), configured
+in `Constants.localizerConstants`. Its encoder directions are Pedro's defaults and
+**unverified** — Tuning → Localization Test checks them first. **Pedro is not tuned yet**:
+`followerConstants` and `pathConstraints` are library defaults, so paths, `turnTo`/`hold`
+and `TestAuto` should not be trusted until the tuning OpModes have been run.
+
+`Constants.LOCALIZER_INSTALLED` (now `true`) is kept as a switch: set `false` for a chassis
+without pods and the follower runs on `StubLocalizer` — robot-centric TeleOp works, and the
+guarded OpModes (`TestAuto`, `Tuning`) refuse to start, because on a frozen pose a path
+drives at full power until a timeout.
+
+The Pinpoint is an I2C device, read inside `follower.update()` (phase 3) — the one I2C read
+the loop budget accepts. Check the `update` figure in `Robot.DEBUG_TIMING`'s phase line.
 
 Docs: <https://pedropathing.com/docs>
 
@@ -140,8 +150,8 @@ CAD: `AimController.LAUNCH_DIRECTION = 0`, `LAUNCHER_LEFT_OFFSET_IN = 0`), so ai
 robot forward at the target. The gains are untuned starting points, live-editable in
 Panels. Vision lag (~30–50 ms) limits the gains. `Robot.aimError` corrects for it by
 subtracting the heading change since the frame's capture (`HeadingHistory`, wall-clock
-keyed like the Limelight's timestamps). On `StubLocalizer` that change is always zero, so
-the correction only starts working once the Pinpoint is in.
+keyed like the Limelight's timestamps). It depends on the Pinpoint's heading; on
+`StubLocalizer` the change is always zero and the correction does nothing.
 
 Camera-side setup the code assumes: an AprilTag pipeline at index 0 (36h11, full 3D, tag
 size 82.55 mm), and the camera's mounting entered in the Limelight UI so robot-space z is
