@@ -24,7 +24,9 @@ public final class ClusterFit {
 
     /**
      * @param n   tags seen, ≥ 2, with distinct offsets
-     * @param out receives {@code {x, y, z}} of the centre
+     * @param out receives {@code {x, y, z}} of the centre; if it has a fourth element, that
+     *            receives the measured/true spacing — also when the fit is rejected for it, so
+     *            a rejection can be diagnosed
      * @return false if the fit is rejected
      */
     public static boolean center(int n, double[] offset, double[] x, double[] y, double[] z,
@@ -53,6 +55,7 @@ public final class ClusterFit {
         if (soo == 0) return false;
         double ux = sx / soo, uy = sy / soo, uz = sz / soo;
         double scale = Math.sqrt(ux * ux + uy * uy + uz * uz);
+        if (out.length > 3) out[3] = scale;
         if (scale < MIN_SCALE || scale > MAX_SCALE) return false;
 
         // The row is known to be unit-spaced; normalise so measurement noise in the spacing

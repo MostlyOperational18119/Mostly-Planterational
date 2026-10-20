@@ -7,10 +7,15 @@ import static org.junit.Assert.assertTrue;
 import com.pedropathing.math.Pose;
 import com.pedropathing.ivy.Command;
 
+import org.firstinspires.ftc.teamcode.field.Alliance;
+import org.firstinspires.ftc.teamcode.field.Cell;
+import org.firstinspires.ftc.teamcode.sim.FakeVisionSource;
+import org.firstinspires.ftc.teamcode.sim.OuttakeTuning;
 import org.firstinspires.ftc.teamcode.sim.SimRobot;
 import org.firstinspires.ftc.teamcode.subsystems.Outtake;
 import org.firstinspires.ftc.teamcode.subsystems.Transfer;
 import org.firstinspires.ftc.teamcode.util.AimController;
+import org.firstinspires.ftc.teamcode.util.RangeController;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -19,9 +24,11 @@ import org.junit.Test;
 public class ShootingRoutinesTest {
 
     private SimRobot sim;
+    private OuttakeTuning tuning;
 
     @Before
     public void setUp() {
+        tuning = OuttakeTuning.pinForTests();
         sim = new SimRobot(new Pose(0, 0, 0));
     }
 
@@ -29,7 +36,8 @@ public class ShootingRoutinesTest {
     public void restoreTuning() {
         ShootingRoutines.AIM_TIMEOUT_MS = 2000;
         ShootingRoutines.FEED_MS = 1500;
-        Outtake.TARGET_RPM = 0;
+        ShootingRoutines.SHOOT_AIM_TOLERANCE_DEG = 3;
+        tuning.restore();
     }
 
     /** The error to a fixed field point, from the simulated pose. */
@@ -54,7 +62,7 @@ public class ShootingRoutinesTest {
         routine.schedule();
 
         assertTrue("never started feeding", sim.cycleUntil(sim.robot.transfer::running, 4000));
-        assertTrue("fed before it was aimed", AimController.onTarget(aimErrorTo(60, 40)));
+        assertTrue("fed before it was aimed", ShootingRoutines.aimedToShoot(aimErrorTo(60, 40)));
         assertTrue("flywheel not spinning while feeding", sim.robot.outtake.running());
 
         assertTrue("never finished", sim.cycleUntil(() -> !routine.isScheduled(), 2000));
@@ -93,5 +101,69 @@ public class ShootingRoutinesTest {
 
         sim.outtakeMotor.setVelocity(3000 / 60.0 * Outtake.TICKS_PER_REV);
         assertTrue("never fed once at speed", sim.cycleUntil(this::fed, 200));
+    }
+
+    /** A camera that sees red's up CELL at field point (tx, ty), from wherever the sim is. */
+    private void see(double tx, double ty) {
+        Pose p = sim.pose();
+        double dx = tx - p.x(), dy = ty - p.y(), h = p.heading();
+        sim.camera.sample = new FakeVisionSource.Frame(System.currentTimeMillis(), 0)
+                .cluster(Cell.RED_FAR, dx * Math.cos(h) + dy * Math.sin(h),
+                        -dx * Math.sin(h) + dy * Math.cos(h), 49)
+                .build();
+    }
+
+    @Test
+    public void teleopShootTurnsDrivesToRangeThenFeeds() {
+        Outtake.SPIN_UP_MS = 100;
+        sim.camera.online = true;
+        // Target 70 in away and 20 in to the left: has to turn and close 20 in.
+        double tx = 70 * Math.cos(0.28), ty = 70 * Math.sin(0.28);
+        Command shoot = ShootingRoutines.teleopShoot(sim.robot, Alliance.RED,
+                () -> 0, () -> 0, () -> 0);
+        see(tx, ty);
+        sim.cycle();
+        shoot.schedule();
+
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (!sim.robot.transfer.running() && System.nanoTime() < deadline) {
+            see(tx, ty);
+            sim.cycle();
+        }
+        assertTrue("never fed", sim.robot.transfer.running());
+        double distance = Math.hypot(tx - sim.pose().x(), ty - sim.pose().y());
+        assertEquals("fed out of range", RangeController.SHOT_DISTANCE_IN, distance,
+                RangeController.TOLERANCE_IN);
+        assertTrue("fed before aimed", ShootingRoutines.aimedToShoot(sim.robot.aimError(Alliance.RED)));
+        assertTrue(sim.robot.outtake.running());
+
+        shoot.cancel();
+        sim.cycle();
+        assertEquals("releasing stops the feed", 0.0, sim.transferMotor.power(), 0.0);
+        assertEquals(0.0, sim.outtakeMotor.power(), 0.0);
+    }
+
+    @Test
+    public void teleopShootWithNoTargetNeverFeedsAndLeavesTheSticksLive() {
+        Outtake.SPIN_UP_MS = 0;
+        Command shoot = ShootingRoutines.teleopShoot(sim.robot, Alliance.RED,
+                () -> 0.5, () -> 0, () -> 0);
+        shoot.schedule();
+        sim.cycles(100);
+        assertFalse("fed blind", fed());
+        assertTrue("driver's forward ignored", sim.pose().x() > 1);
+    }
+
+    @Test
+    public void aRobotStalledJustOutsideTheAimDeadbandStillFeeds() {
+        // The aim controller stops correcting inside AimController.TOLERANCE (1.5°); a robot
+        // that comes to rest at 2° off — too little turn power left to move it — must still
+        // count as aimed, or hold-Y would never feed until pressed again.
+        Outtake.SPIN_UP_MS = 0;
+        double stalled = Math.toRadians(2);
+        assertFalse("premise: outside the controller's deadband", AimController.onTarget(stalled));
+        assertTrue(ShootingRoutines.aimedToShoot(stalled));
+        assertFalse(ShootingRoutines.aimedToShoot(Math.toRadians(5)));
+        assertFalse(ShootingRoutines.aimedToShoot(Double.NaN));
     }
 }

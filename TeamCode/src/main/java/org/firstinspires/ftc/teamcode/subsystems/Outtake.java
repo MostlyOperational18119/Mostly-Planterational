@@ -88,19 +88,29 @@ public class Outtake implements Subsystem {
 
     /**
      * Fixed launch speed: {@link #spin()}'s target, and {@link #spinFor}'s when it has no
-     * distance or no table. 0 = not measured yet: run open loop at {@link #SPIN_POWER}.
+     * distance or no table (today, always — {@link #SHOT_POINTS} is empty). 0 = run open loop
+     * at {@link #SPIN_POWER}. 2750 scores from {@code RangeController.SHOT_DISTANCE_IN}.
      */
-    public static double TARGET_RPM = 0;
+    public static double TARGET_RPM = 2750;
 
     /**
      * Feedforward, power per rpm at {@link Battery#NOMINAL_VOLTS}: 1 / the free speed at power 1
-     * and 12 V ({@code ShotCalibration} does the conversion). 600RPM actually works better,
-     * look into more tomorrow when calibrating
+     * and 12 V ({@code ShotCalibration} does the conversion). Measured on the robot: at 1/5000
+     * the flywheel settles ~25 rpm above a 2750 target, inside {@link #AT_SPEED_TOLERANCE_RPM}.
+     * Too high a KV settles the speed <em>above</em> target — P cannot pull it down, since the
+     * controller never brakes — and feeding, which waits for "at speed", never starts.
      */
-    public static double KV = 1.0 / 6000;
+    public static double KV = 1.0 / 5000;
 
     /** Proportional, power per rpm of error. Untuned starting point. */
     public static double KP = 0.0005;
+
+    /**
+     * Open loop there is no target speed to wait for, so {@link #readyToFeed()} waits this long
+     * after the flywheel starts instead. <b>Placeholder</b> — watch the rpm settle after a start
+     * and set it to that.
+     */
+    public static double SPIN_UP_MS = 1000;
 
     /** Within this of {@link #TARGET_RPM} the flywheel counts as at speed. */
     public static double AT_SPEED_TOLERANCE_RPM = 100;
@@ -116,6 +126,7 @@ public class Outtake implements Subsystem {
 
     // --- setpoints, mutated by commands in phase 4 ---
     private boolean spinning;
+    private long spinStartNanos;
     private double targetRpm;           // while spinning; 0 or NaN = open loop
     private double openLoopPower;
 
@@ -236,11 +247,12 @@ public class Outtake implements Subsystem {
 
     /**
      * Whether feeding now makes sense: {@link #atSpeed()} under velocity control. Open loop
-     * there is no target to be at, so this is just "spinning" — gating on {@link #atSpeed()}
-     * there would wait out the whole timeout.
+     * there is no target to be at — gating on {@link #atSpeed()} would wait out the whole
+     * timeout — so it is "spinning for at least {@link #SPIN_UP_MS}".
      */
     public boolean readyToFeed() {
-        return closedLoop() ? atSpeed() : spinning;
+        if (closedLoop()) return atSpeed();
+        return spinning && System.nanoTime() - spinStartNanos >= SPIN_UP_MS * 1e6;
     }
 
     // --- commands ---
@@ -268,6 +280,7 @@ public class Outtake implements Subsystem {
         return Command.build()
                 .setStart(() -> {
                     spinning = true;
+                    spinStartNanos = System.nanoTime();
                     targetRpm = rpm.getAsDouble();
                 })
                 .setExecute(() -> targetRpm = rpm.getAsDouble())

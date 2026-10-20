@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.vision;
 
+import com.bylazar.configurables.annotations.Configurable;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
@@ -27,6 +28,7 @@ import java.util.List;
  * <p>Robot-relative poses are robot poses only if the camera's mounting (forward, right, up,
  * roll, pitch, yaw) is entered in the Limelight UI; z is then height above the floor.
  */
+@Configurable
 public final class LimelightSource implements VisionSource {
 
     /** Name in the robot configuration. */
@@ -36,11 +38,24 @@ public final class LimelightSource implements VisionSource {
     private static final int PIPELINE = 0;
 
     /**
-     * Limelight robot space is forward / right / up; ours is Pedro's forward / left / up. If a
-     * tag placed to the robot's left reads negative y in telemetry, this is the line to flip.
-     * Unverified on the robot.
+     * Maps the Limelight's robot-space y onto ours (Pedro's: + left). −1 assumes the Limelight's
+     * y is + right. The SDK passes the camera's {@code t6t_rs} through unchanged (checked in the
+     * SDK 12.0 classes), so this is purely the Limelight's convention. <b>Unverified</b>: with a
+     * CELL to the robot's left, telemetry's {@code left} must read positive; if it reads
+     * negative, aiming turns <em>away</em> from the target — flip this. Panels-editable so it can
+     * be flipped live; it applies from the next frame.
      */
-    private static final double LEFT_SIGN = -1;
+    public static double LEFT_SIGN = -1;
+
+    /**
+     * Which axes {@code t6t_rs} actually arrives in. Limelight's docs say robot space is
+     * x forward / y right / z up, but on our camera it reads like <em>camera</em> space —
+     * x right / y down / z forward — with the mounting still applied: with a CELL straight
+     * ahead, the docs' mapping put its height in "left" (a +90° aim error) and its distance in
+     * "up". True (the default) maps forward = z, right = x, up = −y. Panels-editable; if the
+     * telemetry's fwd/left/up stop matching a tape measure, flip it and compare.
+     */
+    public static boolean CAMERA_STYLE_AXES = true;
 
     private final Limelight3A limelight;
 
@@ -96,9 +111,15 @@ public final class LimelightSource implements VisionSource {
             LLResultTypes.FiducialResult f = fiducials.get(i);
             Position p = f.getTargetPoseRobotSpace().getPosition().toUnit(DistanceUnit.INCH);
             ids[i] = f.getFiducialId();
-            x[i] = p.x;
-            y[i] = LEFT_SIGN * p.y;
-            z[i] = p.z;
+            if (CAMERA_STYLE_AXES) {
+                x[i] = p.z;
+                y[i] = LEFT_SIGN * p.x;
+                z[i] = -p.y;
+            } else {
+                x[i] = p.x;
+                y[i] = LEFT_SIGN * p.y;
+                z[i] = p.z;
+            }
         }
         return new VisionSample(r.isValid(), r.getControlHubTimeStamp(),
                 r.getCaptureLatency() + r.getTargetingLatency(), ids, x, y, z);

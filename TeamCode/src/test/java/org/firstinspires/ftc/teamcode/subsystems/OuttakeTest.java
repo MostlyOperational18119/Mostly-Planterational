@@ -10,6 +10,7 @@ import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
 
 import org.firstinspires.ftc.teamcode.sim.FakeMotor;
+import org.firstinspires.ftc.teamcode.sim.OuttakeTuning;
 import org.firstinspires.ftc.teamcode.util.ShotMap;
 import org.junit.After;
 import org.junit.Before;
@@ -21,9 +22,11 @@ public class OuttakeTest {
     private FakeMotor motor;
     private Outtake outtake;
     private double volts = Battery.NOMINAL_VOLTS;
+    private OuttakeTuning tuning;
 
     @Before
     public void setUp() {
+        tuning = OuttakeTuning.pinForTests();
         Scheduler.reset();
         motor = new FakeMotor();
         outtake = new Outtake(motor.motor, () -> volts);
@@ -32,9 +35,7 @@ public class OuttakeTest {
     @After
     public void restoreTuning() {
         // Panels-tunable statics: a test that sets them must not leak into the next.
-        Outtake.TARGET_RPM = 0;
-        Outtake.KV = 1.0 / 6000;
-        Outtake.KP = 0.0005;
+        tuning.restore();
     }
 
     /** Sets what the encoder reports, in flywheel rpm. */
@@ -104,7 +105,8 @@ public class OuttakeTest {
     }
 
     @Test
-    public void unsetTargetMeansOpenLoopAndReadyOnceSpinning() {
+    public void unsetTargetMeansOpenLoopAndReadyOnceSpunUp() {
+        Outtake.SPIN_UP_MS = 0;
         assertFalse(outtake.readyToFeed());
         outtake.spin().schedule();
         measure(2500);
@@ -188,6 +190,7 @@ public class OuttakeTest {
     @Test
     public void spinForWithoutADistanceFallsBackToTargetRpmThenOpenLoop() {
         Outtake mapped = new Outtake(motor.motor, () -> volts, new ShotMap(new double[][] {{40, 2400}}));
+        Outtake.SPIN_UP_MS = 0;
         Command spin = mapped.spinFor(() -> Double.NaN);
         spin.schedule();
         mapped.read();
@@ -265,5 +268,16 @@ public class OuttakeTest {
         outtake.run(0.5).schedule();
         cycle();
         assertEquals(0.5, motor.power(), 0.0);
+    }
+
+    @Test
+    public void openLoopIsNotReadyUntilItHasSpunUp() throws InterruptedException {
+        Outtake.SPIN_UP_MS = 50;
+        outtake.spin().schedule();
+        cycle();
+        assertFalse("the first pollen must not meet a stopped flywheel", outtake.readyToFeed());
+        Thread.sleep(60);
+        cycle();
+        assertTrue(outtake.readyToFeed());
     }
 }
