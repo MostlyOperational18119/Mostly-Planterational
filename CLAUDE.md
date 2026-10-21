@@ -18,13 +18,16 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── Robot.java        Subsystem registry + the loop contract (startCycle/read/update/
 │                     execute/write/telemetry). OpModes call robot.cycle().
 │                     aimError() — vision's aim corrected for the turn since capture;
+│                     shotDistance() — distance to the up CELL, last sighting held;
 │                     DEBUG_TIMING per-phase timing line
 ├── subsystems/       Drive.java — Pedro Follower wrapped as a requirable subsystem
 │                     Intake.java — one open-loop motor ("intake"), collect/eject/off
 │                     Transfer.java — open-loop motor ("transfer") lifting pollen into the
 │                     flywheel, feed/reverse/off
 │                     Outtake.java — flywheel ("outtake"), velocity control in write();
-│                     open loop until TARGET_RPM is set. spin/off, atSpeed/readyToFeed
+│                     SHOT_POINTS distance→rpm table, voltage compensated.
+│                     spin/spinFor/spinAt/off, atSpeed/readyToFeed
+│                     Battery.java — battery voltage, sampled every 100 ms (not bulk data)
 │                     Vision.java — HIVE CELL clusters relative to the robot; which CELL is up
 ├── vision/           VisionSource (interface) / LimelightSource (the only Limelight3A user)
 │                     VisionSample — LLResult reduced to per-tag robot-frame positions
@@ -38,6 +41,8 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     Aim.java — bearing / turn / distance to a goal, pure math
 │                     HeadingHistory.java — wall-clock-keyed headings for latency correction
 │                     AimController.java — chassis aim law (P + kS, capped), Panels-tunable
+│                     ShotMap.java — launch speed by distance, interpolated measured table
+│                     RangeController.java — drives to the shooting distance on vision range
 ├── pedroPathing/     Constants.java — Pedro 3 configs (drivetrainConfig, localizerConfig,
 │                     foresightConfig), createFollower, LOCALIZER_INSTALLED, FORESIGHT_TUNED
 │                     StubLocalizer.java — fixed pose, for a chassis without odometry
@@ -45,37 +50,61 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     Tuning.java — @Tuner registrations for the AutoTune webpage
 │                     procedures/ — AutoTune procedures, copied unchanged from the Quickstart
 ├── routines/         TestRoutines.java — routine trees as static factories (§8.2)
-│                     ShootingRoutines.java — aimAndShoot: aim on vision, then feed
+│                     ShootingRoutines.java — aimAndShoot: aim on vision, then feed;
+│                     teleopShoot: hold-to-shoot (aim + drive to range + feed when ready)
 ├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
 │                     AimAndShootAuto.java — "Test: Aim and Shoot", no localizer needed
 │                     TestPaths.java — its Paths, built at init
-└── teleop/           DriveTeleOp.java — driver control on the loop contract; hold-to-aim
+└── teleop/           DriveTeleOp.java — driver control on the loop contract; hold Y to shoot
+                      ShotCalibration.java — measures the flywheel, records SHOT_POINTS
                       DriveMotorTest.java — one drive motor at a time (disabled)
 
 TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 ├── sim/              SimRobot (real Robot + Follower over fakes), SimDrivetrain,
 │                     SimLocalizer, SimForesight, FakeMotor, FakeVisionSource
 ├── util/             tier 1: WriteGate, LoopTimer, Timeouts, Aim, AimController,
-│                     HeadingHistory
+│                     HeadingHistory, ShotMap, RangeController
 ├── vision/           tier 1: FieldFrame, ClusterFit
 ├── field/            tier 1: CellTest (tag IDs against the manual)
-├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest
+├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest,
+│                     BatteryTest
 ├── routines/         tier 2: TestRoutinesTest, ShootingRoutinesTest
 └── RobotTest.java    tier 2: aimError latency correction, phase timing
 ```
 
-`Drive`, `Intake`, `Transfer`, `Outtake` and `Vision` are the whole robot. Every step of the
+`Drive`, `Intake`, `Transfer`, `Outtake` and `Vision` are the whole robot (plus `Battery`,
+which only reads the voltage). Every step of the
 architecture doc's implementation order (§10) has code; what is left needs the robot:
 
 - **Step 1:** the ≤ 6 ms median loop has never been measured on hardware. Turn on
   `Robot.DEBUG_TIMING` (Panels) for the per-phase breakdown.
-- **Step 3:** the flywheel is the closed-loop subsystem, but `Outtake.TARGET_RPM` is 0
-  (open loop) until someone measures it — the procedure is in `Outtake`'s Javadoc.
-  `TICKS_PER_REV = 28` is inferred from goBILDA's geared variants, not verified.
+- **Step 3:** the flywheel is the closed-loop subsystem. The hood is fixed, so the launch
+  speed is chosen by distance: `Outtake.spinFor` looks up `SHOT_POINTS` (a measured
+  distance→rpm table, interpolated, ends held) with the Limelight's distance to the up CELL
+  (`Robot.shotDistance`, last sighting held while out of view). `SHOT_POINTS` is still empty,
+  so in practice it runs **closed loop at a fixed `TARGET_RPM = 2750`** (`KV = 1/5000`,
+  measured: settles ~25 rpm above target). Too high a KV settles the speed *above* target —
+  the controller never brakes — and feeding, which waits for ±`AT_SPEED_TOLERANCE_RPM`, never
+  starts. `TICKS_PER_REV = 28` and `KP` are still unverified/untuned. Its output is
+  voltage compensated (× 12 V ÷ `Battery.volts()`), because intake current sagged the battery
+  enough to drop shots; `SPIN_POWER`/`KV`/`KP` are therefore "at 12 V". The
+  **"Calibrate: Flywheel and Shots"** OpMode (`ShotCalibration`) measures all of it, in the
+  order in `Outtake`'s Javadoc. Planned: a Pinpoint fallback for the distance once the HIVE's
+  field coordinates are known.
 - **Step 5:** Pedro is tuned, so `TestAuto` can run; its on-robot run (wall-clock time and
   loop period) is still to do. Real routines need this season's field coordinates.
 - **Step 6:** `AimAndShootAuto` runs without odometry; `ShootingRoutines.AIM_TIMEOUT_MS` and
   `FEED_MS` are placeholders.
+- **TeleOp shooting works on the robot** — hold Y (`ShootingRoutines.teleopShoot`): with the
+  flywheel at a fixed speed, the robot closes on the one range that scores
+  (`RangeController.SHOT_DISTANCE_IN = 42`, measured, on the live vision distance) while
+  aiming, and feeds once aimed (`ShootingRoutines.SHOOT_AIM_TOLERANCE_DEG`, deliberately
+  wider than the aim controller's 1.5° deadband, or a robot resting just outside it never
+  feeds), in range and at speed. Once feeding starts it latches until Y is released. The
+  TeleOp status line's `shoot (Y): waiting on …` names whichever condition is blocking.
+  Lateral tolerance (±12 in, per the team) is left to the driver's strafe. X is a manual
+  flywheel+transfer toggle for when vision is unusable. Known limit: pollen bounces out at
+  the fixed hood angle — mechanical, not code.
 - **Step 7:** the latency correction is live now the Pinpoint is in, but untested on the
   robot; once it is, `AimController`'s gains can go up.
 
@@ -89,7 +118,7 @@ for Panels and `https://repo.dairy.foundation/releases` for Sloth):
 | `com.pedropathing:revhub` | 3.0.2 | **Pedro Pathing 3** — follower, Foresight, Mecanum, Pinpoint (brings `com.pedropathing:core`) |
 | `com.pedropathing:tuning` | 1.0.3-beta.1 | **AutoTune** — robot-hosted tuning webpage (needs Sloth from `repo.dairy.foundation`). 1.0.2's scanner NPEs on the first `@Tuner`, leaving the page empty |
 | `com.pedropathing.ivy:core` | 1.1.1 | **Ivy** — command/scheduler framework |
-| `com.bylazar:fullpanels` | 1.0.12 | Panels dashboard (`PanelsTelemetry`) |
+| `com.bylazar:fullpanels` | 1.0.19 | Panels dashboard (`PanelsTelemetry`) |
 
 ### Pedro Pathing
 
@@ -125,6 +154,9 @@ puts `StubLocalizer` in, for a chassis without pods.
 
 The Pinpoint is an I2C device, read inside `follower.update()` (phase 3) — the one I2C read
 the loop budget accepts. Check the `update` figure in `Robot.DEBUG_TIMING`'s phase line.
+The other non-bulk read is the battery voltage (`VoltageSensor.getVoltage()` is its own hub
+transaction, `LynxGetADCCommand`): `Battery` samples it once per 100 ms in phase 2, so it
+shows in the `read` max, not the median.
 
 Docs: <https://pedropathing.com/docs/pathing> ·
 [Quickstart](https://github.com/Pedro-Pathing/Quickstart) (source of `procedures/`)
@@ -164,7 +196,7 @@ through the alliance's up CELL; `Drive.aimedTeleopDrive` servos it to zero throu
 `AimController` while the driver keeps translation, falling back to the turn stick when the
 target is out of view. It closes the loop on the vision measurement, so it needs no
 odometry. In `DriveTeleOp`: alliance chosen in init (X blue, B red), right trigger held to
-aim. The flywheel fires straight forward from the robot's centreline (confirmed from the
+aim, Y held to aim, drive to range and shoot. The flywheel fires straight forward from the robot's centreline (confirmed from the
 CAD: `AimController.LAUNCH_DIRECTION = 0`, `LAUNCHER_LEFT_OFFSET_IN = 0`), so aiming points
 robot forward at the target. The gains are untuned starting points, live-editable in
 Panels. Vision lag (~30–50 ms) limits the gains. `Robot.aimError` corrects for it by
@@ -172,13 +204,24 @@ subtracting the heading change since the frame's capture (`HeadingHistory`, wall
 keyed like the Limelight's timestamps). It depends on the Pinpoint's heading; on
 `StubLocalizer` the change is always zero and the correction does nothing.
 
-Camera-side setup the code assumes: an AprilTag pipeline at index 0 (36h11, full 3D, tag
-size 82.55 mm), and the camera's mounting entered in the Limelight UI so robot-space z is
-height above the floor. The camera must look **up** at the CELL undersides (clusters at
-roughly 34 and 49 in). **Unverified on hardware:** the Limelight robot-space y sign
-(`LimelightSource.LEFT_SIGN`) and the up-CELL height threshold — check both against a tape
-measure on a real HIVE. `FieldFrame` copies Pedro 2's `FTCCoordinates.convertToPedro` (Pedro 3
-has no FTC-frame conversion) and is also unverified.
+Camera-side setup (verified on the robot): an AprilTag pipeline at index 0 (36h11, full 3D,
+tag size **82 mm** — the black square, measured; matches the manual's 3.25 in), and the
+camera's mounting entered in the Limelight UI (front-right, pitched up 45°, yaw/roll 0) so
+robot-space z is height above the floor. The robot config must name it exactly `limelight`,
+or `LimelightSource` silently falls back to no camera and telemetry shows `OFFLINE`.
+
+**`t6t_rs` does not follow Limelight's docs.** The docs say robot space is x forward / y
+right / z up; on our camera the values arrive in camera-style axes (x right / y down /
+z forward) with the mounting applied. With the docs' mapping a CELL straight ahead read a
+~+90° aim error and its height as its distance. `LimelightSource.CAMERA_STYLE_AXES = true`
+(Panels-editable) maps forward = z, left = −x (`LEFT_SIGN = −1`), up = −y. Verified: with
+the robot facing a CELL it reads `fwd 40.1 left 0.2 up 45.5 … +0.4° spacing x1.00`. The `spacing` figure on
+each CELL line is the fit's measured/true tag spacing (rejected outside 0.75–1.25); ~1.00
+means tag size and `Cell` offsets match the field. Under `TOO_FEW_TAGS` telemetry lists the
+tag IDs seen and why each CELL's fit failed. The up CELL measured 45.5 in (manual-derived
+estimate 49); `UP_CELL_MIN_HEIGHT_IN = 41.3` still separates it from the down CELL but has
+not been checked against a measured down CELL. `FieldFrame` copies Pedro 2's
+`FTCCoordinates.convertToPedro` (Pedro 3 has no FTC-frame conversion) and is unverified.
 
 Docs: <https://docs.limelightvision.io/> ·
 [FTC setup](https://docs.limelightvision.io/docs/docs-limelight/getting-started/ftc)
@@ -287,8 +330,8 @@ OpMode base class.** Everything else our code is built from already runs headles
 
 These are deliberate choices in the shell, not accidents — keep them when adding subsystems:
 
-1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower, Intake, Transfer,
-   Outtake, Vision)` —
+1. **`Robot` has a hardware-free constructor**, `Robot(HubManager, Follower, Battery, Intake,
+   Transfer, Outtake, Vision)` —
    one parameter per hardware-backed subsystem — with
    `Robot.fromHardwareMap(hw)` as the competition path. A `HardwareMap` never reaches
    anything below that factory.

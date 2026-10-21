@@ -10,6 +10,8 @@ import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
 
 import org.firstinspires.ftc.teamcode.sim.FakeMotor;
+import org.firstinspires.ftc.teamcode.sim.OuttakeTuning;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -23,14 +25,21 @@ public class TransferTest {
     private FakeMotor outtakeMotor;
     private Transfer transfer;
     private Outtake outtake;
+    private OuttakeTuning tuning;
 
     @Before
     public void setUp() {
+        tuning = OuttakeTuning.pinForTests();
         Scheduler.reset();
         transferMotor = new FakeMotor();
         outtakeMotor = new FakeMotor();
         transfer = new Transfer(transferMotor.motor);
-        outtake = new Outtake(outtakeMotor.motor);
+        outtake = new Outtake(outtakeMotor.motor, () -> Battery.NOMINAL_VOLTS);
+    }
+
+    @After
+    public void restoreTuning() {
+        tuning.restore();
     }
 
     private void cycle() {

@@ -8,6 +8,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.field.Alliance;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import org.firstinspires.ftc.teamcode.subsystems.Battery;
 import org.firstinspires.ftc.teamcode.subsystems.Drive;
 import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.subsystems.Outtake;
@@ -59,6 +60,7 @@ import java.util.function.Supplier;
 public class Robot {
 
     private static final long TELEMETRY_PERIOD_NANOS = 100_000_000L;   // 10 Hz
+    private static final Alliance[] ALLIANCES = Alliance.values();
 
     /**
      * Adds a per-phase timing line (median / max of read, update, execute, write) to telemetry,
@@ -69,6 +71,7 @@ public class Robot {
 
     public final Follower follower;
     public final Drive drive;
+    public final Battery battery;
     public final Intake intake;
     public final Transfer transfer;
     public final Outtake outtake;
@@ -82,6 +85,7 @@ public class Robot {
     private final LoopTimer executeTimer = new LoopTimer();
     private final LoopTimer writeTimer = new LoopTimer();
     private final HeadingHistory headings = new HeadingHistory();
+    private final double[] lastShotDistance = {Double.NaN, Double.NaN};    // by Alliance ordinal
 
     private TelemetryManager telemetry;
     private Supplier<String> status;
@@ -89,27 +93,30 @@ public class Robot {
 
     /** The competition path: builds the Follower and puts every hub in MANUAL bulk caching. */
     public static Robot fromHardwareMap(HardwareMap hardwareMap) {
+        Battery battery = Battery.fromHardwareMap(hardwareMap);
         return new Robot(new LynxHubs(hardwareMap), Constants.createFollower(hardwareMap),
-                Intake.fromHardwareMap(hardwareMap), Transfer.fromHardwareMap(hardwareMap),
-                Outtake.fromHardwareMap(hardwareMap), Vision.fromHardwareMap(hardwareMap));
+                battery, Intake.fromHardwareMap(hardwareMap), Transfer.fromHardwareMap(hardwareMap),
+                Outtake.fromHardwareMap(hardwareMap, battery::volts),
+                Vision.fromHardwareMap(hardwareMap));
     }
 
     /**
      * Hardware-free constructor. Subsystems are handed their collaborators; nothing below this
      * line ever sees a {@code HardwareMap}. That is what keeps the stack constructible off the
-     * robot — {@code new Robot(HubManager.NONE, follower, new Intake(m1), new Transfer(m2),
-     * new Outtake(m3), new Vision(VisionSource.NONE))}.
+     * robot — {@code new Robot(HubManager.NONE, follower, battery, new Intake(m1),
+     * new Transfer(m2), new Outtake(m3, battery::volts), new Vision(VisionSource.NONE))}.
      */
-    public Robot(HubManager hubs, Follower follower, Intake intake, Transfer transfer,
-                 Outtake outtake, Vision vision) {
+    public Robot(HubManager hubs, Follower follower, Battery battery, Intake intake,
+                 Transfer transfer, Outtake outtake, Vision vision) {
         this.hubs = hubs;
         this.follower = follower;
         this.drive = new Drive(follower);
+        this.battery = battery;
         this.intake = intake;
         this.transfer = transfer;
         this.outtake = outtake;
         this.vision = vision;
-        this.subsystems = Arrays.<Subsystem>asList(drive, intake, transfer, outtake, vision);   // add new subsystems here
+        this.subsystems = Arrays.<Subsystem>asList(battery, drive, intake, transfer, outtake, vision);   // add new subsystems here
     }
 
     public Robot withTelemetry(TelemetryManager telemetry) {
@@ -117,7 +124,8 @@ public class Robot {
         return this;
     }
 
-    /** An OpMode-level line (routine state, timings), shown inside the 10 Hz throttle. */
+    /** OpMode-level lines (routine state, timings), shown inside the 10 Hz throttle; split on
+     *  {@code \n}. */
     public Robot withStatus(Supplier<String> status) {
         this.status = status;
         return this;
@@ -132,6 +140,10 @@ public class Robot {
     public void read() {
         // Indexed loops rather than enhanced-for: no Iterator allocation per phase per loop.
         for (int i = 0; i < subsystems.size(); i++) subsystems.get(i).read();
+        for (Alliance a : ALLIANCES) {
+            double d = vision.targetDistance(a);
+            if (!Double.isNaN(d)) lastShotDistance[a.ordinal()] = d;
+        }
     }
 
     public void write() {
@@ -147,7 +159,9 @@ public class Robot {
 
         telemetry.addLine(loopTimer.summary());
         if (DEBUG_TIMING) telemetry.addLine(phaseSummary());
-        if (status != null) telemetry.addLine(status.get());
+        if (status != null) {
+            for (String line : status.get().split("\n")) telemetry.addLine(line);
+        }
         for (int i = 0; i < subsystems.size(); i++) subsystems.get(i).telemetry(telemetry);
         telemetry.update();
     }
@@ -205,6 +219,20 @@ public class Robot {
     }
 
     // --- cross-subsystem queries: safe in phase 4 ---
+
+    /**
+     * Floor distance to {@code alliance}'s up CELL, inches, for choosing the launch speed: this
+     * cycle's {@link Vision#targetDistance} when the CELL is in view, otherwise the last one
+     * seen — so the flywheel holds its speed while the tags drop out of view mid-turn. NaN
+     * until the CELL has been seen at all.
+     *
+     * <p>Limelight only for now. The held value goes stale if the robot drives a long way
+     * without seeing the CELL; the planned fix is to fall back to the Pinpoint pose and the
+     * HIVE's field position, once this season's coordinates are in.
+     */
+    public double shotDistance(Alliance alliance) {
+        return lastShotDistance[alliance.ordinal()];
+    }
 
     /**
      * {@link Vision#aimError(Alliance)}, brought forward from when the frame was captured to

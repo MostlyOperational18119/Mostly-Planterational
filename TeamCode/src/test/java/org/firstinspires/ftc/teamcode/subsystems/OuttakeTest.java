@@ -10,6 +10,8 @@ import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
 
 import org.firstinspires.ftc.teamcode.sim.FakeMotor;
+import org.firstinspires.ftc.teamcode.sim.OuttakeTuning;
+import org.firstinspires.ftc.teamcode.util.ShotMap;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -19,20 +21,21 @@ public class OuttakeTest {
 
     private FakeMotor motor;
     private Outtake outtake;
+    private double volts = Battery.NOMINAL_VOLTS;
+    private OuttakeTuning tuning;
 
     @Before
     public void setUp() {
+        tuning = OuttakeTuning.pinForTests();
         Scheduler.reset();
         motor = new FakeMotor();
-        outtake = new Outtake(motor.motor);
+        outtake = new Outtake(motor.motor, () -> volts);
     }
 
     @After
     public void restoreTuning() {
         // Panels-tunable statics: a test that sets them must not leak into the next.
-        Outtake.TARGET_RPM = 0;
-        Outtake.KV = 1.0 / 6000;
-        Outtake.KP = 0.0005;
+        tuning.restore();
     }
 
     /** Sets what the encoder reports, in flywheel rpm. */
@@ -102,7 +105,8 @@ public class OuttakeTest {
     }
 
     @Test
-    public void unsetTargetMeansOpenLoopAndReadyOnceSpinning() {
+    public void unsetTargetMeansOpenLoopAndReadyOnceSpunUp() {
+        Outtake.SPIN_UP_MS = 0;
         assertFalse(outtake.readyToFeed());
         outtake.spin().schedule();
         measure(2500);
@@ -158,5 +162,122 @@ public class OuttakeTest {
         cycle();
         assertEquals(0.0, motor.power(), 0.0);
         assertFalse(outtake.atSpeed());
+    }
+
+    @Test
+    public void spinForFollowsTheShotMapAsTheDistanceChanges() {
+        Outtake mapped = new Outtake(motor.motor, () -> volts,
+                new ShotMap(new double[][] {{40, 2400}, {80, 3600}}));
+        double[] distance = {40};
+        mapped.spinFor(() -> distance[0]).schedule();
+        measure(2400);
+        mapped.read();
+        Scheduler.execute();
+        mapped.write();
+        assertEquals(2400, mapped.targetRpm(), 0.0);
+        assertTrue(mapped.atSpeed());
+        assertEquals("at speed, feedforward alone", Outtake.KV * 2400, motor.power(), 1e-9);
+
+        distance[0] = 60;               // drove back: the target moves with it, same command
+        mapped.read();
+        Scheduler.execute();
+        mapped.write();
+        assertEquals(3000, mapped.targetRpm(), 1e-9);
+        assertFalse("600 rpm short is not at speed", mapped.atSpeed());
+        assertFalse(mapped.readyToFeed());
+    }
+
+    @Test
+    public void spinForWithoutADistanceFallsBackToTargetRpmThenOpenLoop() {
+        Outtake mapped = new Outtake(motor.motor, () -> volts, new ShotMap(new double[][] {{40, 2400}}));
+        Outtake.SPIN_UP_MS = 0;
+        Command spin = mapped.spinFor(() -> Double.NaN);
+        spin.schedule();
+        mapped.read();
+        Scheduler.execute();
+        mapped.write();
+        assertEquals("no distance, no TARGET_RPM: open loop", Outtake.SPIN_POWER, motor.power(), 0.0);
+        assertEquals(0, mapped.targetRpm(), 0.0);
+        assertTrue(mapped.readyToFeed());
+
+        Outtake.TARGET_RPM = 3000;
+        mapped.read();
+        Scheduler.execute();
+        mapped.write();
+        assertEquals(3000, mapped.targetRpm(), 0.0);
+    }
+
+    @Test
+    public void anEmptyShotMapFallsBackToTargetRpm() {
+        Outtake.TARGET_RPM = 3000;
+        Outtake unmapped = new Outtake(motor.motor, () -> volts, new ShotMap(new double[][] {}));
+        assertEquals(3000, unmapped.rpmFor(55), 0.0);
+    }
+
+    @Test
+    public void spinAtReadsItsSupplierEveryCycle() {
+        double[] rpm = {3000};
+        outtake.spinAt(() -> rpm[0]).schedule();
+        cycle();
+        assertEquals(3000, outtake.targetRpm(), 0.0);
+        rpm[0] = 3300;
+        cycle();
+        assertEquals(3300, outtake.targetRpm(), 0.0);
+    }
+
+    @Test
+    public void endingSpinClearsTheTarget() {
+        Command spin = outtake.spinAt(() -> 3000);
+        spin.schedule();
+        cycle();
+        spin.cancel();
+        cycle();
+        assertEquals(0, outtake.targetRpm(), 0.0);
+        assertFalse(outtake.readyToFeed());
+    }
+
+    @Test
+    public void openLoopPowerRisesAsTheBatterySags() {
+        outtake.spin().schedule();
+        cycle();
+        assertEquals("at nominal, unchanged", Outtake.SPIN_POWER, motor.power(), 1e-9);
+        volts = 10;             // the intake just pulled the battery down
+        cycle();
+        assertEquals(Outtake.SPIN_POWER * 12 / 10, motor.power(), 1e-9);
+        volts = 8;
+        cycle();
+        assertEquals("never past full power", 1.0, motor.power(), 0.0);
+    }
+
+    @Test
+    public void theFeedforwardIsCompensatedToo() {
+        Outtake.TARGET_RPM = 3000;
+        outtake.spin().schedule();
+        measure(3000);
+        volts = 13;             // fresh battery: less power for the same speed
+        cycle();
+        assertEquals(Outtake.KV * 3000 * 12 / 13, motor.power(), 1e-9);
+    }
+
+    @Test
+    public void rawRunIsNotCompensated() {
+        volts = 10;
+        outtake.run(1.0).schedule();
+        cycle();
+        assertEquals("a measurement tool: exactly the power asked for", 1.0, motor.power(), 0.0);
+        outtake.run(0.5).schedule();
+        cycle();
+        assertEquals(0.5, motor.power(), 0.0);
+    }
+
+    @Test
+    public void openLoopIsNotReadyUntilItHasSpunUp() throws InterruptedException {
+        Outtake.SPIN_UP_MS = 50;
+        outtake.spin().schedule();
+        cycle();
+        assertFalse("the first pollen must not meet a stopped flywheel", outtake.readyToFeed());
+        Thread.sleep(60);
+        cycle();
+        assertTrue(outtake.readyToFeed());
     }
 }

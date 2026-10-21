@@ -56,10 +56,13 @@ public class Vision implements Subsystem {
     private VisionSample processedSample;
     private final CellSighting[] sightings = new CellSighting[CELLS.length];
     private final boolean[] seen = new boolean[CELLS.length];
+    // why a cell has no fix, for telemetry: how many of its tags matched, and the fit's spacing
+    private final int[] matched = new int[CELLS.length];
+    private final double[] spacing = new double[CELLS.length];
 
     // scratch for the fit, sized for one cluster
     private final double[] offset = new double[4], fx = new double[4], fy = new double[4],
-            fz = new double[4], center = new double[3];
+            fz = new double[4], center = new double[4];
 
     public static Vision fromHardwareMap(HardwareMap hardwareMap) {
         return new Vision(LimelightSource.fromHardwareMap(hardwareMap));
@@ -90,6 +93,8 @@ public class Vision implements Subsystem {
     private void fitClusters(VisionSample s) {
         for (int c = 0; c < CELLS.length; c++) {
             seen[c] = false;
+            matched[c] = 0;
+            spacing[c] = Double.NaN;
             if (s == null || !s.valid) continue;
             Cell cell = CELLS[c];
             int n = 0;
@@ -102,9 +107,12 @@ public class Vision implements Subsystem {
                 fz[n] = s.tagZ[t];
                 n++;
             }
-            if (n < MIN_TAGS_PER_CELL || !ClusterFit.center(n, offset, fx, fy, fz, center)) {
-                continue;
-            }
+            matched[c] = n;
+            if (n < MIN_TAGS_PER_CELL) continue;
+            center[3] = Double.NaN;
+            boolean fitted = ClusterFit.center(n, offset, fx, fy, fz, center);
+            spacing[c] = center[3];
+            if (!fitted) continue;
             CellSighting sighting = sightings[c];
             sighting.tagCount = n;
             sighting.x = center[0];
@@ -130,6 +138,7 @@ public class Vision implements Subsystem {
         if (status != Status.FIX) {
             t.addLine("vision: " + status
                     + (sample != null ? " (" + sample.tagCount() + " tags seen)" : ""));
+            if (status == Status.TOO_FEW_TAGS) t.addLine(fitDiagnosis());
             return;
         }
         StringBuilder line = new StringBuilder(String.format("vision: FIX age %dms", ageMs()));
@@ -141,10 +150,32 @@ public class Vision implements Subsystem {
         for (Cell cell : CELLS) {
             CellSighting s = sighting(cell);
             if (s == null) continue;
-            t.addLine(String.format("  %s %dt fwd %.1f left %.1f up %.1f → %.1fin %+.1f°",
+            // spacing: measured/true tag spacing, ~1.00 when the pipeline's tag size and the
+            // tag layout (Cell offsets) both match the field
+            t.addLine(String.format("  %s %dt fwd %.1f left %.1f up %.1f → %.1fin %+.1f° spacing x%.2f",
                     cell, s.tagCount, s.x, s.y, s.z, s.floorDistance(),
-                    Math.toDegrees(s.bearing())));
+                    Math.toDegrees(s.bearing()), spacing[cell.ordinal()]));
         }
+    }
+
+    /**
+     * Why no CELL has a fix although tags are in view: the IDs seen (ours are 30–45), and for
+     * each CELL with tags, how many matched and the fit's measured/true tag spacing. A spacing
+     * outside 0.75–1.25 is rejected — almost always the pipeline's tag size.
+     */
+    private String fitDiagnosis() {
+        StringBuilder line = new StringBuilder("  tag IDs:");
+        for (int t = 0; t < sample.tagCount(); t++) line.append(' ').append(sample.tagIds[t]);
+        for (int c = 0; c < CELLS.length; c++) {
+            if (matched[c] == 0) continue;
+            line.append(" | ").append(CELLS[c]).append(' ').append(matched[c]).append('t');
+            if (matched[c] < MIN_TAGS_PER_CELL) line.append(" (need 2)");
+            else if (!Double.isNaN(spacing[c])) {
+                line.append(String.format(" spacing x%.2f%s", spacing[c], seen[c] ? ""
+                        : " REJECTED (need 0.75–1.25: check pipeline tag size)"));
+            }
+        }
+        return line.toString();
     }
 
     @Override
@@ -190,6 +221,16 @@ public class Vision implements Subsystem {
         Cell up = upCell(alliance);
         CellSighting target = up == null ? null : sighting(up);
         return target == null ? Double.NaN : AimController.error(target.x, target.y);
+    }
+
+    /**
+     * Floor distance to {@code alliance}'s up CELL's tag cluster, inches; NaN when that CELL is
+     * not in view. What the launch speed is chosen by ({@code Outtake.SHOT_POINTS}).
+     */
+    public double targetDistance(Alliance alliance) {
+        Cell up = upCell(alliance);
+        CellSighting target = up == null ? null : sighting(up);
+        return target == null ? Double.NaN : target.floorDistance();
     }
 
     /** Wall-clock ms when the frame behind this cycle's sightings was captured (§7.4). */
