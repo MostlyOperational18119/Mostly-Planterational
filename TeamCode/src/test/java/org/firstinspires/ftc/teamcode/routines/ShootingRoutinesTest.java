@@ -4,7 +4,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.pedropathing.api.Paths;
 import com.pedropathing.math.Pose;
+import com.pedropathing.paths.Path;
 import com.pedropathing.ivy.Command;
 
 import org.firstinspires.ftc.teamcode.field.Alliance;
@@ -37,6 +39,10 @@ public class ShootingRoutinesTest {
         ShootingRoutines.AIM_TIMEOUT_MS = 2000;
         ShootingRoutines.FEED_MS = 1500;
         ShootingRoutines.SHOOT_AIM_TOLERANCE_DEG = 3;
+        ShootingRoutines.LEAVE_TIMEOUT_MS = 3000;
+        ShootingRoutines.DECIDE_TIMEOUT_MS = 1000;
+        ShootingRoutines.PRELOAD_FEED_MS = 3000;
+        ShootingRoutines.RANGE_TIMEOUT_MS = 4000;
         tuning.restore();
     }
 
@@ -111,6 +117,77 @@ public class ShootingRoutinesTest {
                 .cluster(Cell.RED_FAR, dx * Math.cos(h) + dy * Math.sin(h),
                         -dx * Math.sin(h) + dy * Math.cos(h), 49)
                 .build();
+    }
+
+    /** Cycles until {@code routine} ends, showing the camera red's FAR CELL at {@code height}. */
+    private boolean runSeeingRedFarAt(Command routine, double height, long timeoutMs) {
+        double tx = 50, ty = 0;
+        long deadline = System.nanoTime() + timeoutMs * 1_000_000L;
+        while (routine.isScheduled() && System.nanoTime() < deadline) {
+            Pose p = sim.pose();
+            double dx = tx - p.x(), dy = ty - p.y(), h = p.heading();
+            sim.camera.sample = new FakeVisionSource.Frame(System.currentTimeMillis(), 0)
+                    .cluster(Cell.RED_FAR, dx * Math.cos(h) + dy * Math.sin(h),
+                            -dx * Math.sin(h) + dy * Math.cos(h), height)
+                    .build();
+            sim.cycle();
+        }
+        return !routine.isScheduled();
+    }
+
+    @Test
+    public void shootIfUpShootsWhenTheTargetCellIsUp() {
+        Outtake.SPIN_UP_MS = 0;
+        ShootingRoutines.PRELOAD_FEED_MS = 200;
+        sim.camera.online = true;
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.RED, Cell.RED_FAR);
+        routine.schedule();
+
+        assertTrue("never finished", runSeeingRedFarAt(routine, 49, 6000));
+        assertTrue("did not shoot at an up CELL", fed());
+    }
+
+    @Test
+    public void shootIfUpStopsWhenTheTargetCellIsDown() {
+        sim.camera.online = true;
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.RED, Cell.RED_FAR);
+        routine.schedule();
+
+        assertTrue("never finished", runSeeingRedFarAt(routine, 34, 1000));
+        assertFalse("shot at a down CELL", fed());
+        assertFalse(sim.robot.outtake.running());
+    }
+
+    @Test
+    public void shootIfUpStopsWhenItNeverSeesTheHive() {
+        ShootingRoutines.DECIDE_TIMEOUT_MS = 200;
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.RED, Cell.RED_FAR);
+        routine.schedule();
+
+        assertTrue("never finished", sim.cycleUntil(() -> !routine.isScheduled(), 1000));
+        assertFalse("shot blind", fed());
+    }
+
+    @Test
+    public void leavesTheCornerBeforeDecidingThenShoots() {
+        Outtake.SPIN_UP_MS = 0;
+        ShootingRoutines.PRELOAD_FEED_MS = 200;
+        sim.camera.online = true;
+        Path leave = Paths.line(new Pose(0, 0, 0), new Pose(12, 0, 0)).constant(0);
+        Command routine = ShootingRoutines.leaveThenShootIfUp(sim.robot, leave, Alliance.RED,
+                Cell.RED_FAR);
+        routine.schedule();
+
+        // The camera sees nothing from the corner; from the move's end it sees the up CELL.
+        long deadline = System.nanoTime() + 8_000_000_000L;
+        while (routine.isScheduled() && System.nanoTime() < deadline) {
+            if (sim.pose().x() > 10) see(80, 0);
+            else sim.camera.sample = null;
+            sim.cycle();
+            if (fed()) assertTrue("fed before leaving the corner", sim.pose().x() > 10);
+        }
+        assertFalse("never finished", routine.isScheduled());
+        assertTrue("did not shoot once it could see the up CELL", fed());
     }
 
     @Test

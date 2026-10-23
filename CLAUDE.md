@@ -52,9 +52,16 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── routines/         TestRoutines.java — routine trees as static factories (§8.2)
 │                     ShootingRoutines.java — aimAndShoot: aim on vision, then feed;
 │                     teleopShoot: hold-to-shoot (aim + drive to range + feed when ready)
+│                     leaveThenShootIfUp / shootIfUp: drive a Path, then rangeAndShoot the
+│                     preload if the target CELL is up, else nothing
 ├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
 │                     AimAndShootAuto.java — "Test: Aim and Shoot", no localizer needed
-│                     TestPaths.java — its Paths, built at init
+│                     TestPaths.java — TestAuto's Paths, built at init
+│                     RedPreloadAuto.java — "Red: Preload If Up": leaves the corner, then
+│                     shoots 3 only if the CELL is up
+│                     BluePreloadAuto.java — "Blue: Preload If Up", the same for blue
+│                     AutoPaths.java — every auto's Paths, relative to the start; one set
+│                     for both alliances
 └── teleop/           DriveTeleOp.java — driver control on the loop contract; hold Y to shoot
                       ShotCalibration.java — measures the flywheel, records SHOT_POINTS
                       DriveMotorTest.java — one drive motor at a time (disabled)
@@ -66,6 +73,7 @@ TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 │                     HeadingHistory, ShotMap, RangeController
 ├── vision/           tier 1: FieldFrame, ClusterFit
 ├── field/            tier 1: CellTest (tag IDs against the manual)
+├── auto/             tier 1: AutoPathsTest
 ├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest,
 │                     BatteryTest
 ├── routines/         tier 2: TestRoutinesTest, ShootingRoutinesTest
@@ -82,8 +90,8 @@ architecture doc's implementation order (§10) has code; what is left needs the 
   speed is chosen by distance: `Outtake.spinFor` looks up `SHOT_POINTS` (a measured
   distance→rpm table, interpolated, ends held) with the Limelight's distance to the up CELL
   (`Robot.shotDistance`, last sighting held while out of view). `SHOT_POINTS` is still empty,
-  so in practice it runs **closed loop at a fixed `TARGET_RPM = 2750`** (`KV = 1/5000`,
-  measured: settles ~25 rpm above target). Too high a KV settles the speed *above* target —
+  so in practice it runs **closed loop at a fixed `TARGET_RPM = 3000`** (`KV = 1/5000`,
+  measured at 2750: settles ~25 rpm above target). Too high a KV settles the speed *above* target —
   the controller never brakes — and feeding, which waits for ±`AT_SPEED_TOLERANCE_RPM`, never
   starts. `TICKS_PER_REV = 28` and `KP` are still unverified/untuned. Its output is
   voltage compensated (× 12 V ÷ `Battery.volts()`), because intake current sagged the battery

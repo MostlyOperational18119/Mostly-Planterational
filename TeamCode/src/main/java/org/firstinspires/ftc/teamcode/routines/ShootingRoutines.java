@@ -4,9 +4,11 @@ import com.bylazar.configurables.annotations.Configurable;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
+import com.pedropathing.paths.Path;
 
 import org.firstinspires.ftc.teamcode.Robot;
 import org.firstinspires.ftc.teamcode.field.Alliance;
+import org.firstinspires.ftc.teamcode.field.Cell;
 import org.firstinspires.ftc.teamcode.util.RangeController;
 import org.firstinspires.ftc.teamcode.util.Timeouts;
 
@@ -40,6 +42,24 @@ public final class ShootingRoutines {
      * so this can be loose; at 42 in, 3° is ~2 in at the target.
      */
     public static double SHOOT_AIM_TOLERANCE_DEG = 3;
+
+    /** How long {@link #leaveThenShootIfUp} gives the move out of the corner. */
+    public static double LEAVE_TIMEOUT_MS = 3000;
+
+    /** How long {@link #shootIfUp} waits for vision to decide which CELL is up. */
+    public static double DECIDE_TIMEOUT_MS = 1000;
+
+    /**
+     * How long the transfer feeds the preload — must cover all three pollen.
+     * <b>Placeholder</b>: measure one going through, times three, plus margin.
+     */
+    public static double PRELOAD_FEED_MS = 3000;
+
+    /**
+     * How long {@link #rangeAndShoot} drives and aims before feeding anyway. Longer than
+     * {@link #AIM_TIMEOUT_MS}, which only turns: this also closes the range from the start.
+     */
+    public static double RANGE_TIMEOUT_MS = 4000;
 
     private ShootingRoutines() {}
 
@@ -119,6 +139,61 @@ public final class ShootingRoutines {
                 Groups.sequential(
                         Commands.waitUntil(() -> readyToShoot(r, alliance)),
                         r.transfer.feed())
+        );
+    }
+
+    /**
+     * Drives {@code leave} — out of the start corner, to where the camera can see the HIVE —
+     * then {@link #shootIfUp}. Sequential on purpose (rule 5): which CELL is up is only
+     * decided once the camera has had the view, so it cannot overlap the move. The move is
+     * bounded by {@link #LEAVE_TIMEOUT_MS}; past it the decision is made from wherever the
+     * robot got to.
+     */
+    public static Command leaveThenShootIfUp(Robot r, Path leave, Alliance alliance, Cell target) {
+        return Groups.sequential(
+                Timeouts.limit(r.drive.follow(leave), LEAVE_TIMEOUT_MS),
+                shootIfUp(r, alliance, target)
+        );
+    }
+
+    /**
+     * The autonomous preload: if {@code target} is {@code alliance}'s up CELL, shoots into it
+     * ({@link #rangeAndShoot}); if it is down, or never seen, does nothing and finishes.
+     *
+     * <p>Waits up to {@link #DECIDE_TIMEOUT_MS} for vision to tell which CELL is up — normally
+     * no wait, since vision has been reading through init. A CELL never seen is not shot at:
+     * firing blind at a HIVE that may be down scores nothing.
+     */
+    public static Command shootIfUp(Robot r, Alliance alliance, Cell target) {
+        return Groups.sequential(
+                Timeouts.limit(Commands.waitUntil(() -> r.vision.upCell(alliance) != null),
+                        DECIDE_TIMEOUT_MS),
+                Commands.conditional(() -> r.vision.upCell(alliance) == target,
+                        rangeAndShoot(r, alliance, PRELOAD_FEED_MS),
+                        Commands.instant(() -> {}))
+        );
+    }
+
+    /**
+     * {@link #teleopShoot} for autonomous: turns onto {@code alliance}'s up CELL and drives to
+     * {@link RangeController#SHOT_DISTANCE_IN} on the live vision distance, then feeds for
+     * {@code feedMs} once aimed, in range and spun up — or after {@link #RANGE_TIMEOUT_MS}
+     * regardless. With the CELL out of view the robot sits still. Finishes when the feed does.
+     */
+    public static Command rangeAndShoot(Robot r, Alliance alliance, double feedMs) {
+        DoubleSupplier aimError = () -> r.aimError(alliance);
+        return Groups.deadline(
+                Groups.sequential(
+                        Timeouts.limit(Commands.waitUntil(() -> readyToShoot(r, alliance)),
+                                RANGE_TIMEOUT_MS),
+                        Timeouts.limit(r.transfer.feed(), feedMs)
+                ),
+                r.outtake.spinFor(() -> r.shotDistance(alliance)),
+                r.drive.aimedTeleopDrive(() -> {
+                    double f = RangeController.forward(r.vision.targetDistance(alliance),
+                            aimError.getAsDouble());
+                    return Double.isNaN(f) ? 0 : f;
+                }, () -> 0, () -> 0, aimError)
         );
     }
 
