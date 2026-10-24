@@ -52,16 +52,17 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── routines/         TestRoutines.java — routine trees as static factories (§8.2)
 │                     ShootingRoutines.java — aimAndShoot: aim on vision, then feed;
 │                     teleopShoot: hold-to-shoot (aim + drive to range + feed when ready)
-│                     leaveThenShootIfUp / shootIfUp: drive a Path, then rangeAndShoot the
-│                     preload if the target CELL is up, else nothing
+│                     shootIfUpThenPark / shootIfUp: rangeAndShoot the preload if the
+│                     target CELL is up, then park in the LOADING ZONE either way
 ├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
 │                     AimAndShootAuto.java — "Test: Aim and Shoot", no localizer needed
 │                     TestPaths.java — TestAuto's Paths, built at init
-│                     RedPreloadAuto.java — "Red: Preload If Up": leaves the corner, then
-│                     shoots 3 only if the CELL is up
-│                     BluePreloadAuto.java — "Blue: Preload If Up", the same for blue
-│                     AutoPaths.java — every auto's Paths, relative to the start; one set
-│                     for both alliances
+│                     RedPreloadAuto.java — "Red: Preload Only": from the Fig. 11-1 start,
+│                     shoots 3 if the AUDIENCE CELL is up, then parks
+│                     BluePreloadAuto.java — "Blue: Preload Only", the same from the rear
+│                     wall, targeting the FAR CELL
+│                     AutoPaths.java — every auto's Paths, from the manual's field drawings;
+│                     one set for both alliances (the field is 180° symmetric)
 └── teleop/           DriveTeleOp.java — driver control on the loop contract; hold Y to shoot
                       ShotCalibration.java — measures the flywheel, records SHOT_POINTS
                       DriveMotorTest.java — one drive motor at a time (disabled)
@@ -73,7 +74,7 @@ TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 │                     HeadingHistory, ShotMap, RangeController
 ├── vision/           tier 1: FieldFrame, ClusterFit
 ├── field/            tier 1: CellTest (tag IDs against the manual)
-├── auto/             tier 1: AutoPathsTest
+├── auto/             tier 1: AutoPathsTest (park route clears the HIVE, ends in the zone)
 ├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest,
 │                     BatteryTest
 ├── routines/         tier 2: TestRoutinesTest, ShootingRoutinesTest

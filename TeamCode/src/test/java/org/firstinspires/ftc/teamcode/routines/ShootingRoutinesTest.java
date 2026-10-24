@@ -4,11 +4,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.pedropathing.api.Paths;
 import com.pedropathing.math.Pose;
-import com.pedropathing.paths.Path;
 import com.pedropathing.ivy.Command;
 
+import org.firstinspires.ftc.teamcode.auto.AutoPaths;
 import org.firstinspires.ftc.teamcode.field.Alliance;
 import org.firstinspires.ftc.teamcode.field.Cell;
 import org.firstinspires.ftc.teamcode.sim.FakeVisionSource;
@@ -40,7 +39,8 @@ public class ShootingRoutinesTest {
         ShootingRoutines.AIM_TIMEOUT_MS = 2000;
         ShootingRoutines.FEED_MS = 1500;
         ShootingRoutines.SHOOT_AIM_TOLERANCE_DEG = 3;
-        ShootingRoutines.LEAVE_TIMEOUT_MS = 3000;
+        ShootingRoutines.APPROACH_TIMEOUT_MS = 3000;
+        ShootingRoutines.PARK_TIMEOUT_MS = 4000;
         ShootingRoutines.DECIDE_TIMEOUT_MS = 1000;
         ShootingRoutines.PRELOAD_FEED_MS = 5000;
         ShootingRoutines.RANGE_TIMEOUT_MS = 4000;
@@ -161,6 +161,7 @@ public class ShootingRoutinesTest {
 
     @Test
     public void shootIfUpStopsWhenTheTargetCellIsDown() {
+        ShootingRoutines.DECIDE_TIMEOUT_MS = 200;
         sim.camera.online = true;
         Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.RED, Cell.RED_FAR);
         routine.schedule();
@@ -171,28 +172,65 @@ public class ShootingRoutinesTest {
     }
 
     @Test
-    public void blueShootsWhenItsAudienceCellIsUp() {
-        // What the blue auto runs: blue's tags (38–41) must go all the way to a launch.
-        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.BLUE, Cell.BLUE_AUDIENCE);
+    public void aDownMisreadAtStartDoesNotSkipTheShot() {
+        // On the robot: the CELL was up, but the first reading fitted it just under the
+        // up/down height, and the robot went straight to park. Any up reading inside the
+        // decision window must count.
+        Outtake.SPIN_UP_MS = 0;
+        ShootingRoutines.PRELOAD_FEED_MS = 200;
+        sim.camera.online = true;
+        Boolean[] decided = {null};
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.RED, Cell.RED_FAR,
+                shoot -> decided[0] = shoot);
         routine.schedule();
 
-        assertTrue("never finished", runSeeing(Cell.BLUE_AUDIENCE, routine, 49, 6000));
+        long deadline = System.nanoTime() + 6_000_000_000L;
+        for (int cycle = 0; routine.isScheduled() && System.nanoTime() < deadline; cycle++) {
+            // The first five frames read it 40 in high (down); after that, 45.5 (up).
+            double height = cycle < 5 ? 40 : 45.5;
+            Pose p = sim.pose();
+            double dx = 50 - p.x(), dy = -p.y(), h = p.heading();
+            sim.camera.sample = new FakeVisionSource.Frame(System.currentTimeMillis(), 0)
+                    .cluster(Cell.RED_FAR, dx * Math.cos(h) + dy * Math.sin(h),
+                            -dx * Math.sin(h) + dy * Math.cos(h), height)
+                    .build();
+            sim.cycle();
+        }
+        assertFalse("never finished", routine.isScheduled());
+        assertEquals("decided not to shoot", Boolean.TRUE, decided[0]);
+        assertTrue("did not shoot at an up CELL", fed());
+    }
+
+    @Test
+    public void blueShootsWhenItsFarCellIsUp() {
+        // What the blue auto runs: blue's tags (42–45) must go all the way to a launch.
+        Outtake.SPIN_UP_MS = 0;
+        ShootingRoutines.PRELOAD_FEED_MS = 200;
+        sim.camera.online = true;
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.BLUE, Cell.BLUE_FAR);
+        routine.schedule();
+
+        assertTrue("never finished", runSeeing(Cell.BLUE_FAR, routine, 49, 6000));
         assertTrue("did not shoot at blue's up CELL", fed());
     }
 
     @Test
-    public void blueStopsWhenItsAudienceCellIsDown() {
-        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.BLUE, Cell.BLUE_AUDIENCE);
+    public void blueStopsWhenItsFarCellIsDown() {
+        ShootingRoutines.DECIDE_TIMEOUT_MS = 200;
+        sim.camera.online = true;
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.BLUE, Cell.BLUE_FAR);
         routine.schedule();
 
-        assertTrue("never finished", runSeeing(Cell.BLUE_AUDIENCE, routine, 34, 1000));
+        assertTrue("never finished", runSeeing(Cell.BLUE_FAR, routine, 34, 1000));
         assertFalse("shot at a down CELL", fed());
     }
 
     @Test
     public void blueIgnoresTheRedHive() {
         // Red's CELL up and in view is "not seen" for blue: it must not shoot at it.
-        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.BLUE, Cell.BLUE_AUDIENCE);
+        ShootingRoutines.DECIDE_TIMEOUT_MS = 200;
+        sim.camera.online = true;
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.BLUE, Cell.BLUE_FAR);
         routine.schedule();
 
         assertTrue("never finished", runSeeing(Cell.RED_AUDIENCE, routine, 49, 1000));
@@ -209,26 +247,40 @@ public class ShootingRoutinesTest {
         assertFalse("shot blind", fed());
     }
 
+    /** Within 2 in of {@code paths.park}, where the auto parks. */
+    private void assertParked(AutoPaths paths) {
+        Pose p = sim.pose();
+        assertEquals("not parked: x", paths.park.x(), p.x(), 2);
+        assertEquals("not parked: y", paths.park.y(), p.y(), 2);
+    }
+
     @Test
-    public void leavesTheCornerBeforeDecidingThenShoots() {
+    public void shootsThenParksWhenTheTargetCellIsUp() {
         Outtake.SPIN_UP_MS = 0;
         ShootingRoutines.PRELOAD_FEED_MS = 200;
         sim.camera.online = true;
-        Path leave = Paths.line(new Pose(0, 0, 0), new Pose(12, 0, 0)).constant(0);
-        Command routine = ShootingRoutines.leaveThenShootIfUp(sim.robot, leave, Alliance.RED,
-                Cell.RED_FAR);
+        AutoPaths paths = new AutoPaths();
+        Command routine = ShootingRoutines.shootIfUpThenPark(sim.robot, Alliance.RED,
+                Cell.RED_FAR, paths.approach, paths.toPark, shoot -> {});
         routine.schedule();
 
-        // The camera sees nothing from the corner; from the move's end it sees the up CELL.
-        long deadline = System.nanoTime() + 8_000_000_000L;
-        while (routine.isScheduled() && System.nanoTime() < deadline) {
-            if (sim.pose().x() > 10) see(80, 0);
-            else sim.camera.sample = null;
-            sim.cycle();
-            if (fed()) assertTrue("fed before leaving the corner", sim.pose().x() > 10);
-        }
-        assertFalse("never finished", routine.isScheduled());
-        assertTrue("did not shoot once it could see the up CELL", fed());
+        assertTrue("never finished", runSeeingRedFarAt(routine, 49, 15000));
+        assertTrue("did not shoot at an up CELL", fed());
+        assertParked(paths);
+    }
+
+    @Test
+    public void parksWithoutShootingWhenTheTargetCellIsDown() {
+        ShootingRoutines.DECIDE_TIMEOUT_MS = 200;
+        sim.camera.online = true;
+        AutoPaths paths = new AutoPaths();
+        Command routine = ShootingRoutines.shootIfUpThenPark(sim.robot, Alliance.RED,
+                Cell.RED_FAR, paths.approach, paths.toPark, shoot -> {});
+        routine.schedule();
+
+        assertTrue("never finished", runSeeingRedFarAt(routine, 34, 15000));
+        assertFalse("shot at a down CELL", fed());
+        assertParked(paths);
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.CommandBuilder;
 import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
+import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 
 import org.firstinspires.ftc.teamcode.Robot;
@@ -14,6 +15,7 @@ import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.util.RangeController;
 import org.firstinspires.ftc.teamcode.util.Timeouts;
 
+import java.util.function.Consumer;
 import java.util.function.DoubleSupplier;
 
 /**
@@ -45,10 +47,16 @@ public final class ShootingRoutines {
      */
     public static double SHOOT_AIM_TOLERANCE_DEG = 3;
 
-    /** How long {@link #leaveThenShootIfUp} gives the move out of the corner. */
-    public static double LEAVE_TIMEOUT_MS = 3000;
+    /** How long {@link #shootIfUpThenPark} gives the move round the HIVE after shooting. */
+    public static double APPROACH_TIMEOUT_MS = 3000;
 
-    /** How long {@link #shootIfUp} waits for vision to decide which CELL is up. */
+    /** How long {@link #shootIfUpThenPark} gives the drive into the LOADING ZONE. */
+    public static double PARK_TIMEOUT_MS = 4000;
+
+    /**
+     * How long {@link #shootIfUp} watches for its target CELL to read up before giving up on
+     * the shot. Ends at once when it does; a down or unseen CELL costs all of it.
+     */
     public static double DECIDE_TIMEOUT_MS = 1000;
 
     /**
@@ -173,32 +181,57 @@ public final class ShootingRoutines {
     }
 
     /**
-     * Drives {@code leave} — out of the start corner, to where the camera can see the HIVE —
-     * then {@link #shootIfUp}. Sequential on purpose (rule 5): which CELL is up is only
-     * decided once the camera has had the view, so it cannot overlap the move. The move is
-     * bounded by {@link #LEAVE_TIMEOUT_MS}; past it the decision is made from wherever the
-     * robot got to.
+     * The preload auto: {@link #shootIfUp}, then park — whether it shot or not, since PARK
+     * scores either way. Parking drives to {@code approach} with {@code Drive.hold} (it starts
+     * from wherever shooting left the robot, so there is no path to build ahead of time), then
+     * follows {@code park}, built at init, into the LOADING ZONE, and holds there.
+     *
+     * <p>Sequential on purpose (rule 5): the robot cannot leave while it is still aiming and
+     * feeding. Each move is bounded ({@link #APPROACH_TIMEOUT_MS}, {@link #PARK_TIMEOUT_MS});
+     * if the approach times out, the park path still runs from wherever the robot got to.
+     *
+     * @param onDecided see {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}
      */
-    public static Command leaveThenShootIfUp(Robot r, Path leave, Alliance alliance, Cell target) {
+    public static Command shootIfUpThenPark(Robot r, Alliance alliance, Cell target,
+                                            Pose approach, Path park,
+                                            Consumer<Boolean> onDecided) {
         return Groups.sequential(
-                Timeouts.limit(r.drive.follow(leave), LEAVE_TIMEOUT_MS),
-                shootIfUp(r, alliance, target)
+                shootIfUp(r, alliance, target, onDecided),
+                Timeouts.limit(r.drive.hold(approach), APPROACH_TIMEOUT_MS),
+                Timeouts.limit(r.drive.follow(park), PARK_TIMEOUT_MS)
         );
+    }
+
+    /** {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}, not reporting the decision. */
+    public static Command shootIfUp(Robot r, Alliance alliance, Cell target) {
+        return shootIfUp(r, alliance, target, shoot -> {});
     }
 
     /**
      * The autonomous preload: if {@code target} is {@code alliance}'s up CELL, shoots into it
      * ({@link #rangeAndShoot}); if it is down, or never seen, does nothing and finishes.
      *
-     * <p>Waits up to {@link #DECIDE_TIMEOUT_MS} for vision to tell which CELL is up — normally
-     * no wait, since vision has been reading through init. A CELL never seen is not shot at:
-     * firing blind at a HIVE that may be down scores nothing.
+     * <p>Shoots if {@code target} reads up on <em>any</em> cycle within
+     * {@link #DECIDE_TIMEOUT_MS} — normally the first, since vision has been reading through
+     * init. Acting on the first reading alone let one frame that fitted the CELL a little low
+     * (it is told apart by height, with a few inches to spare) skip the shot. So a down CELL
+     * costs the whole window before the routine moves on, and an up one costs nothing. A CELL
+     * never seen is not shot at: firing blind at a HIVE that may be down scores nothing.
+     *
+     * @param onDecided told once, when the window closes: {@code true} if it will shoot
      */
-    public static Command shootIfUp(Robot r, Alliance alliance, Cell target) {
+    public static Command shootIfUp(Robot r, Alliance alliance, Cell target,
+                                    Consumer<Boolean> onDecided) {
+        // Rewritten every cycle of the wait, so it holds the reading that ended it. Built for
+        // one run, like every routine here.
+        boolean[] up = {false};
         return Groups.sequential(
-                Timeouts.limit(Commands.waitUntil(() -> r.vision.upCell(alliance) != null),
-                        DECIDE_TIMEOUT_MS),
-                Commands.conditional(() -> r.vision.upCell(alliance) == target,
+                Timeouts.limit(Commands.waitUntil(
+                        () -> up[0] = r.vision.upCell(alliance) == target), DECIDE_TIMEOUT_MS),
+                Commands.conditional(() -> {
+                            onDecided.accept(up[0]);
+                            return up[0];
+                        },
                         rangeAndShoot(r, alliance, PRELOAD_FEED_MS),
                         Commands.instant(() -> {}))
         );
