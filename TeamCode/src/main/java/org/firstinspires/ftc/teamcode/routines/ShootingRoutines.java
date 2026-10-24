@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode.routines;
 
 import com.bylazar.configurables.annotations.Configurable;
 import com.pedropathing.ivy.Command;
+import com.pedropathing.ivy.CommandBuilder;
 import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
 import com.pedropathing.paths.Path;
@@ -9,6 +10,7 @@ import com.pedropathing.paths.Path;
 import org.firstinspires.ftc.teamcode.Robot;
 import org.firstinspires.ftc.teamcode.field.Alliance;
 import org.firstinspires.ftc.teamcode.field.Cell;
+import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.util.RangeController;
 import org.firstinspires.ftc.teamcode.util.Timeouts;
 
@@ -50,10 +52,11 @@ public final class ShootingRoutines {
     public static double DECIDE_TIMEOUT_MS = 1000;
 
     /**
-     * How long the transfer feeds the preload — must cover all three pollen.
-     * <b>Placeholder</b>: measure one going through, times three, plus margin.
+     * How long the transfer and intake feed the preload — must cover all three pollen.
+     * <b>Placeholder</b>: measure one going through, times three, plus margin. Raised from
+     * 3000 to give the intake time to carry the pollen to the transfer.
      */
-    public static double PRELOAD_FEED_MS = 3000;
+    public static double PRELOAD_FEED_MS = 5000;
 
     /**
      * How long {@link #rangeAndShoot} drives and aims before feeding anyway. Longer than
@@ -61,7 +64,34 @@ public final class ShootingRoutines {
      */
     public static double RANGE_TIMEOUT_MS = 4000;
 
+    /**
+     * Intake power while an autonomous launch feeds ({@link #aimAndShoot},
+     * {@link #rangeAndShoot}). Above {@code Intake.COLLECT_POWER}, which does not kick the
+     * pollen up into the transfer there; TeleOp's launches keep the regular power.
+     * <b>Placeholder</b> — raise it towards 1 if pollen still stalls.
+     */
+    public static double AUTO_INTAKE_POWER = 0.8;
+
     private ShootingRoutines() {}
+
+    /** {@link #feed(Robot, double)} at the regular {@code Intake.COLLECT_POWER}: TeleOp's. */
+    public static CommandBuilder feed(Robot r) {
+        return feed(r, Intake.COLLECT_POWER);
+    }
+
+    /**
+     * Feeds the flywheel: the transfer lifts pollen into it while the intake runs forward at
+     * {@code intakePower} behind it, until the command ends. The intake has to run — pollen
+     * still in the intake only reaches the transfer while it does. Every launch goes through
+     * this.
+     *
+     * <p>Takes the intake's requirement, and a group claims its members' requirements from its
+     * start, so a TeleOp must not bind the intake while a launch is scheduled: a bumper would
+     * interrupt the whole launch.
+     */
+    public static CommandBuilder feed(Robot r, double intakePower) {
+        return Groups.parallel(r.transfer.feed(), r.intake.run(intakePower));
+    }
 
     /** Within {@link #SHOOT_AIM_TOLERANCE_DEG} of the target; false for NaN (no target). */
     public static boolean aimedToShoot(double aimError) {
@@ -99,7 +129,7 @@ public final class ShootingRoutines {
                         Timeouts.limit(Commands.waitUntil(() ->
                                 aimedToShoot(aimError.getAsDouble())
                                         && r.outtake.readyToFeed()), AIM_TIMEOUT_MS),
-                        Timeouts.limit(r.transfer.feed(), FEED_MS)
+                        Timeouts.limit(feed(r, AUTO_INTAKE_POWER), FEED_MS)
                 ),
                 r.outtake.spinFor(distanceIn),
                 r.drive.aimInPlace(aimError)
@@ -138,7 +168,7 @@ public final class ShootingRoutines {
                 // Sequential, so feeding latches on: once started it is not re-gated.
                 Groups.sequential(
                         Commands.waitUntil(() -> readyToShoot(r, alliance)),
-                        r.transfer.feed())
+                        feed(r))
         );
     }
 
@@ -186,7 +216,7 @@ public final class ShootingRoutines {
                 Groups.sequential(
                         Timeouts.limit(Commands.waitUntil(() -> readyToShoot(r, alliance)),
                                 RANGE_TIMEOUT_MS),
-                        Timeouts.limit(r.transfer.feed(), feedMs)
+                        Timeouts.limit(feed(r, AUTO_INTAKE_POWER), feedMs)
                 ),
                 r.outtake.spinFor(() -> r.shotDistance(alliance)),
                 r.drive.aimedTeleopDrive(() -> {

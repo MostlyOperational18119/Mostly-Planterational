@@ -46,7 +46,7 @@ public class TestAuto extends LinearOpMode {
         }
 
         Robot robot = Robot.fromHardwareMap(hardwareMap)
-                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry())
+                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry(), telemetry)
                 .withStatus(this::status);
         TestPaths paths = new TestPaths();
         robot.follower.setPose(TestPaths.START);

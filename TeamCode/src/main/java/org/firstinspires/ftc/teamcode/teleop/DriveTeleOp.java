@@ -31,6 +31,7 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
  * — no mode flags, no state machine.
  *
  * <p>Intake: hold right bumper to collect, left bumper to eject (eject wins if both are held).
+ * Both launches below run the intake while they feed, and the bumpers do nothing meanwhile.
  *
  * <p>Shoot: <b>hold Y</b>. The robot turns onto your alliance's up CELL, drives forward or back
  * to the range the shot scores from ({@code RangeController.SHOT_DISTANCE_IN}), spins the
@@ -59,7 +60,7 @@ public class DriveTeleOp extends LinearOpMode {
         Scheduler.reset();                      // MANDATORY — the Scheduler's state is static
 
         Robot robot = Robot.fromHardwareMap(hardwareMap)
-                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry());
+                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry(), telemetry);
         robot.withStatus(() -> status(robot));
         robot.follower.setPose(Pose.zero());
 
@@ -71,9 +72,9 @@ public class DriveTeleOp extends LinearOpMode {
                 true);
         Command collect = robot.intake.collect();
         Command eject = robot.intake.eject();
-        // One command over both requirements: toggling it starts and stops them together.
+        // One command over all three requirements: toggling it starts and stops them together.
         Command manualLaunch = Groups.parallel(
-                robot.outtake.spinFor(() -> shotDistance(robot)), robot.transfer.feed());
+                robot.outtake.spinFor(() -> shotDistance(robot)), ShootingRoutines.feed(robot));
         Command aim = robot.drive.aimedTeleopDrive(
                 () -> -gamepad1.left_stick_y,
                 () -> -gamepad1.left_stick_x,
@@ -105,11 +106,14 @@ public class DriveTeleOp extends LinearOpMode {
             if (gamepad1.aWasPressed() && Constants.canFollowPaths()) {
                 Timeouts.limit(robot.drive.turnTo(0), SNAP_TIMEOUT_MS).schedule();
             }
+            if (gamepad1.xWasPressed()) toggle(manualLaunch);
+            // A launch runs the intake itself and holds its requirement throughout, so the
+            // bumpers stand down meanwhile: scheduling either would interrupt the launch.
+            boolean launching = manualLaunch.isScheduled() || (shoot != null && gamepad1.y);
             // Eject first: on its release it cancels before collect reschedules, so letting go
             // of eject while still holding collect drops straight back into collecting.
-            whileHeld(eject, gamepad1.left_bumper);
-            whileHeld(collect, gamepad1.right_bumper && !gamepad1.left_bumper);
-            if (gamepad1.xWasPressed()) toggle(manualLaunch);
+            whileHeld(eject, gamepad1.left_bumper && !launching);
+            whileHeld(collect, gamepad1.right_bumper && !gamepad1.left_bumper && !launching);
             // Both require the drive, like driverControl: holding suspends it, releasing
             // resumes it. Shoot also takes the flywheel and transfer from a manual launch.
             whileHeld(aim, gamepad1.right_trigger > 0.5);

@@ -6,6 +6,8 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.ivy.Scheduler;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
 import org.firstinspires.ftc.teamcode.field.Alliance;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.Battery;
@@ -88,6 +90,7 @@ public class Robot {
     private final double[] lastShotDistance = {Double.NaN, Double.NaN};    // by Alliance ordinal
 
     private TelemetryManager telemetry;
+    private Telemetry driverStation;
     private Supplier<String> status;
     private long lastTelemetryNanos;
 
@@ -119,8 +122,18 @@ public class Robot {
         this.subsystems = Arrays.<Subsystem>asList(battery, drive, intake, transfer, outtake, vision);   // add new subsystems here
     }
 
+    /** Telemetry to Panels only. */
     public Robot withTelemetry(TelemetryManager telemetry) {
+        return withTelemetry(telemetry, null);
+    }
+
+    /**
+     * Telemetry to Panels and, unless {@code driverStation} is null, the Driver Station too
+     * (an OpMode's {@code telemetry}): Panels' plain {@code update()} never reaches the DS.
+     */
+    public Robot withTelemetry(TelemetryManager telemetry, Telemetry driverStation) {
         this.telemetry = telemetry;
+        this.driverStation = driverStation;
         return this;
     }
 
@@ -163,7 +176,8 @@ public class Robot {
             for (String line : status.get().split("\n")) telemetry.addLine(line);
         }
         for (int i = 0; i < subsystems.size(); i++) subsystems.get(i).telemetry(telemetry);
-        telemetry.update();
+        if (driverStation != null) telemetry.update(driverStation);
+        else telemetry.update();
     }
 
     // --- the loop ---

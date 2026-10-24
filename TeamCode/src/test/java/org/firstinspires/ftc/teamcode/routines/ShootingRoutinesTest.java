@@ -14,6 +14,7 @@ import org.firstinspires.ftc.teamcode.field.Cell;
 import org.firstinspires.ftc.teamcode.sim.FakeVisionSource;
 import org.firstinspires.ftc.teamcode.sim.OuttakeTuning;
 import org.firstinspires.ftc.teamcode.sim.SimRobot;
+import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.subsystems.Outtake;
 import org.firstinspires.ftc.teamcode.subsystems.Transfer;
 import org.firstinspires.ftc.teamcode.util.AimController;
@@ -41,8 +42,9 @@ public class ShootingRoutinesTest {
         ShootingRoutines.SHOOT_AIM_TOLERANCE_DEG = 3;
         ShootingRoutines.LEAVE_TIMEOUT_MS = 3000;
         ShootingRoutines.DECIDE_TIMEOUT_MS = 1000;
-        ShootingRoutines.PRELOAD_FEED_MS = 3000;
+        ShootingRoutines.PRELOAD_FEED_MS = 5000;
         ShootingRoutines.RANGE_TIMEOUT_MS = 4000;
+        ShootingRoutines.AUTO_INTAKE_POWER = 0.8;
         tuning.restore();
     }
 
@@ -70,10 +72,14 @@ public class ShootingRoutinesTest {
         assertTrue("never started feeding", sim.cycleUntil(sim.robot.transfer::running, 4000));
         assertTrue("fed before it was aimed", ShootingRoutines.aimedToShoot(aimErrorTo(60, 40)));
         assertTrue("flywheel not spinning while feeding", sim.robot.outtake.running());
+        sim.cycle();
+        assertEquals("an auto launch runs the intake at its own, higher power",
+                ShootingRoutines.AUTO_INTAKE_POWER, sim.intakeMotor.power(), 0.0);
 
         assertTrue("never finished", sim.cycleUntil(() -> !routine.isScheduled(), 2000));
         sim.cycle();
         assertEquals(0.0, sim.transferMotor.power(), 0.0);
+        assertEquals(0.0, sim.intakeMotor.power(), 0.0);
         assertEquals(0.0, sim.outtakeMotor.power(), 0.0);
         double heading = sim.pose().heading();
         sim.cycles(20);
@@ -121,13 +127,19 @@ public class ShootingRoutinesTest {
 
     /** Cycles until {@code routine} ends, showing the camera red's FAR CELL at {@code height}. */
     private boolean runSeeingRedFarAt(Command routine, double height, long timeoutMs) {
+        return runSeeing(Cell.RED_FAR, routine, height, timeoutMs);
+    }
+
+    /** Cycles until {@code routine} ends, showing the camera {@code cell} at {@code height},
+     *  50 in ahead of the start. */
+    private boolean runSeeing(Cell cell, Command routine, double height, long timeoutMs) {
         double tx = 50, ty = 0;
         long deadline = System.nanoTime() + timeoutMs * 1_000_000L;
         while (routine.isScheduled() && System.nanoTime() < deadline) {
             Pose p = sim.pose();
             double dx = tx - p.x(), dy = ty - p.y(), h = p.heading();
             sim.camera.sample = new FakeVisionSource.Frame(System.currentTimeMillis(), 0)
-                    .cluster(Cell.RED_FAR, dx * Math.cos(h) + dy * Math.sin(h),
+                    .cluster(cell, dx * Math.cos(h) + dy * Math.sin(h),
                             -dx * Math.sin(h) + dy * Math.cos(h), height)
                     .build();
             sim.cycle();
@@ -156,6 +168,35 @@ public class ShootingRoutinesTest {
         assertTrue("never finished", runSeeingRedFarAt(routine, 34, 1000));
         assertFalse("shot at a down CELL", fed());
         assertFalse(sim.robot.outtake.running());
+    }
+
+    @Test
+    public void blueShootsWhenItsAudienceCellIsUp() {
+        // What the blue auto runs: blue's tags (38–41) must go all the way to a launch.
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.BLUE, Cell.BLUE_AUDIENCE);
+        routine.schedule();
+
+        assertTrue("never finished", runSeeing(Cell.BLUE_AUDIENCE, routine, 49, 6000));
+        assertTrue("did not shoot at blue's up CELL", fed());
+    }
+
+    @Test
+    public void blueStopsWhenItsAudienceCellIsDown() {
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.BLUE, Cell.BLUE_AUDIENCE);
+        routine.schedule();
+
+        assertTrue("never finished", runSeeing(Cell.BLUE_AUDIENCE, routine, 34, 1000));
+        assertFalse("shot at a down CELL", fed());
+    }
+
+    @Test
+    public void blueIgnoresTheRedHive() {
+        // Red's CELL up and in view is "not seen" for blue: it must not shoot at it.
+        Command routine = ShootingRoutines.shootIfUp(sim.robot, Alliance.BLUE, Cell.BLUE_AUDIENCE);
+        routine.schedule();
+
+        assertTrue("never finished", runSeeing(Cell.RED_AUDIENCE, routine, 49, 1000));
+        assertFalse("shot at the other alliance's HIVE", fed());
     }
 
     @Test
@@ -213,10 +254,13 @@ public class ShootingRoutinesTest {
                 RangeController.TOLERANCE_IN);
         assertTrue("fed before aimed", ShootingRoutines.aimedToShoot(sim.robot.aimError(Alliance.RED)));
         assertTrue(sim.robot.outtake.running());
+        assertEquals("hold-Y keeps the regular intake power",
+                Intake.COLLECT_POWER, sim.robot.intake.power(), 0.0);
 
         shoot.cancel();
         sim.cycle();
         assertEquals("releasing stops the feed", 0.0, sim.transferMotor.power(), 0.0);
+        assertEquals("releasing stops the intake", 0.0, sim.intakeMotor.power(), 0.0);
         assertEquals(0.0, sim.outtakeMotor.power(), 0.0);
     }
 

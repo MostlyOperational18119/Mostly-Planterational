@@ -19,8 +19,8 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
  * Blue alliance, from the corner: shoots the three preloaded pollen into the blue HIVE's target
  * CELL if vision sees it facing up; if it is down (or never seen), does nothing.
  *
- * <p>Which blue CELL the corner faces is chosen in init — dpad left AUDIENCE, dpad right FAR —
- * and the status line shows what vision reads for it. At START the robot first drives
+ * <p>The target is always the AUDIENCE CELL, the one the start corner faces; the status line
+ * shows what vision reads for it during init. At START the robot first drives
  * {@link AutoPaths#leave} out of the corner so the camera can see the HIVE's tags, and only
  * then decides. The move is relative to the start pose, so it needs Pedro (a localizer and
  * Foresight) but no field coordinates.
@@ -29,9 +29,9 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
 public class BluePreloadAuto extends LinearOpMode {
 
     private static final Alliance ALLIANCE = Alliance.BLUE;
+    private static final Cell TARGET = Cell.BLUE_AUDIENCE;
     private static final double AUTO_DEADLINE_MS = 28_000;
 
-    private Cell target = Cell.BLUE_AUDIENCE;
     private long startNanos, endNanos;
 
     @Override
@@ -50,21 +50,18 @@ public class BluePreloadAuto extends LinearOpMode {
         }
 
         Robot robot = Robot.fromHardwareMap(hardwareMap)
-                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry());
+                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry(), telemetry);
         robot.withStatus(() -> status(robot));
         AutoPaths paths = new AutoPaths();
         robot.follower.setPose(AutoPaths.START);
 
         while (opModeInInit()) {
-            if (gamepad1.dpad_left) target = Cell.BLUE_AUDIENCE;
-            if (gamepad1.dpad_right) target = Cell.BLUE_FAR;
             robot.initCycle();
         }
 
-        // Built after init because it depends on the target; the path was built above.
         // Failure containment (§8.4): ends on finishing, the deadline, or losing localization.
         Command routine = Groups.race(
-                ShootingRoutines.leaveThenShootIfUp(robot, paths.leave, ALLIANCE, target),
+                ShootingRoutines.leaveThenShootIfUp(robot, paths.leave, ALLIANCE, TARGET),
                 Timeouts.command(AUTO_DEADLINE_MS),
                 Commands.waitUntil(robot.drive::localizationLost));
 
@@ -85,10 +82,10 @@ public class BluePreloadAuto extends LinearOpMode {
         Cell up = robot.vision.upCell(ALLIANCE);
         // Before START the robot is still in the corner, so "not seen" there is expected.
         String reading = up == null ? "not seen" + (startNanos == 0 ? " (yet — decides after leaving)" : "")
-                : up == target ? "UP — will shoot" : "DOWN — will stop";
+                : up == TARGET ? "UP — will shoot" : "DOWN — will stop";
         String routine = startNanos == 0 ? "waiting for start"
                 : endNanos == 0 ? String.format("running %.2fs", (System.nanoTime() - startNanos) / 1e9)
                 : String.format("done in %.2fs", (endNanos - startNanos) / 1e9);
-        return "target: " + target + " (dpad ←/→) | " + reading + " | routine: " + routine;
+        return "target: " + TARGET + " | " + reading + " | routine: " + routine;
     }
 }
