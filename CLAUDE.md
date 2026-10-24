@@ -403,3 +403,13 @@ routine terminates, but only the robot can tell you the loop held 6 ms.
   `pedroPathing/`, `vision/`, `field/`, `util/`.
 - Field-unit convention follows Pedro (inches, radians) — heading in **radians** at API
   boundaries; convert only for display.
+
+## Recording decisions
+
+The team notebook, **`../Mostly-Noterational`** (GitHub `MostlyOperational18119/Mostly-Noterational`),
+is where every subteam's work and decisions go, for the engineering portfolio. **Whenever a notable
+programming decision is settled in a session** — an approach chosen over alternatives, one tried and
+dropped, a measurement that changes the design (like choosing launch speed from a distance table
+because the hood is fixed) — record it there with the **`record-decision`** skill
+(`.claude/skills/record-decision/`), without waiting to be asked. Committing and pushing notebook
+entries is pre-authorized; commits and pushes in *this* repo still need the user to ask.
