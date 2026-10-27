@@ -10,6 +10,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.util.RobotLog;
 
 import org.firstinspires.ftc.teamcode.Robot;
+import org.firstinspires.ftc.teamcode.routines.ShootingRoutines;
 import org.firstinspires.ftc.teamcode.field.Alliance;
 import org.firstinspires.ftc.teamcode.subsystems.Battery;
 import org.firstinspires.ftc.teamcode.subsystems.Outtake;
@@ -33,8 +34,9 @@ import java.util.Locale;
  *       voltage, so it does not matter how charged the battery is.</li>
  *   <li><b>Shot points:</b> Y toggles the flywheel at the calibration speed, dpad up/down
  *       changes it by {@link #RPM_STEP}. Hold the right trigger to aim, the right bumper to
- *       collect (left ejects), A to feed a shot. When shots score, X records
- *       {@code {distance, rpm}} — it needs the CELL in view this cycle, not a held distance.</li>
+ *       collect (left ejects), A to feed a shot (transfer and intake together). When shots
+ *       score, X records {@code {distance, rpm}} — it needs the CELL in view this cycle, not
+ *       a held distance.</li>
  * </ul>
  * Recorded points are shown sorted, as Java to paste into {@link Outtake#SHOT_POINTS}, and
  * written to the robot log ({@code adb logcat -s RobotCore | grep SHOT_POINT}).
@@ -59,7 +61,7 @@ public class ShotCalibration extends LinearOpMode {
         Scheduler.reset();                      // MANDATORY — the Scheduler's state is static
 
         Robot robot = Robot.fromHardwareMap(hardwareMap)
-                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry());
+                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry(), telemetry);
         robot.withStatus(() -> status(robot));
         robot.follower.setPose(Pose.zero());
         calibrationRpm = START_RPM;
@@ -78,7 +80,7 @@ public class ShotCalibration extends LinearOpMode {
         Command fullPower = robot.outtake.run(1.0);
         Command collect = robot.intake.collect();
         Command eject = robot.intake.eject();
-        Command feed = robot.transfer.feed();
+        Command feed = ShootingRoutines.feed(robot);
 
         while (opModeInInit()) {
             if (gamepad1.x) alliance = Alliance.BLUE;
@@ -100,8 +102,9 @@ public class ShotCalibration extends LinearOpMode {
             }
             // Same requirement as spin: holding interrupts it, so Y has to be pressed again.
             whileHeld(fullPower, gamepad1.left_trigger > 0.5);
-            whileHeld(eject, gamepad1.left_bumper);
-            whileHeld(collect, gamepad1.right_bumper && !gamepad1.left_bumper);
+            // A's feed runs the intake itself; a bumper meanwhile would interrupt it.
+            whileHeld(eject, gamepad1.left_bumper && !gamepad1.a);
+            whileHeld(collect, gamepad1.right_bumper && !gamepad1.left_bumper && !gamepad1.a);
             whileHeld(feed, gamepad1.a);
             whileHeld(aim, gamepad1.right_trigger > 0.5);
             robot.cycle();

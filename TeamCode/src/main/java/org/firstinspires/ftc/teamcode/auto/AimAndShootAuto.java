@@ -35,7 +35,7 @@ public class AimAndShootAuto extends LinearOpMode {
         Scheduler.reset();                      // MANDATORY — the Scheduler's state is static
 
         Robot robot = Robot.fromHardwareMap(hardwareMap)
-                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry());
+                .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry(), telemetry);
         robot.withStatus(() -> status(robot));
         robot.follower.setPose(Pose.zero());
 

@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.subsystems;
 
+import com.bylazar.configurables.annotations.Configurable;
 import com.bylazar.telemetry.TelemetryManager;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.CommandBuilder;
@@ -30,6 +31,7 @@ import org.firstinspires.ftc.teamcode.util.WriteGate;
  * <p>Nothing here waits for the flywheel to reach speed: with the outtake open loop there is
  * no speed to wait on. An {@code Outtake.atSpeed()} query would be what gates {@link #feed()}.
  */
+@Configurable
 public class Transfer implements Subsystem {
 
     /**

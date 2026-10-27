@@ -89,9 +89,9 @@ public class Outtake implements Subsystem {
     /**
      * Fixed launch speed: {@link #spin()}'s target, and {@link #spinFor}'s when it has no
      * distance or no table (today, always — {@link #SHOT_POINTS} is empty). 0 = run open loop
-     * at {@link #SPIN_POWER}. 2750 scores from {@code RangeController.SHOT_DISTANCE_IN}.
+     * at {@link #SPIN_POWER}. 3000 scores from {@code RangeController.SHOT_DISTANCE_IN}.
      */
-    public static double TARGET_RPM = 2750;
+    public static double TARGET_RPM = 3000;
 
     /**
      * Feedforward, power per rpm at {@link Battery#NOMINAL_VOLTS}: 1 / the free speed at power 1

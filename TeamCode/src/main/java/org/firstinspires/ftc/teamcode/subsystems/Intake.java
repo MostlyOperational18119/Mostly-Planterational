@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.subsystems;
 
+import com.bylazar.configurables.annotations.Configurable;
 import com.bylazar.telemetry.TelemetryManager;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.CommandBuilder;
@@ -30,12 +31,13 @@ import org.firstinspires.ftc.teamcode.util.WriteGate;
  * <p>They never finish on their own, so outside TeleOp they must sit under a {@code deadline},
  * a {@code race} or {@link org.firstinspires.ftc.teamcode.util.Timeouts#limit} (rule 4).
  */
+@Configurable
 public class Intake implements Subsystem {
 
     /** Flip this, not the power signs, if the intake runs backwards. */
     private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.REVERSE;
 
-    public static final double COLLECT_POWER = 0.7;
+    public static final double COLLECT_POWER = 0.5;
     public static final double EJECT_POWER = -0.6;
 
     private final DcMotorEx motor;
