@@ -49,8 +49,17 @@ public final class ShootingRoutines {
     /** How long {@link #shootIfUpThenPark} gives the move round the HIVE after shooting. */
     public static double APPROACH_TIMEOUT_MS = 3000;
 
-    /** How long {@link #shootIfUpThenPark} gives the drive into the LOADING ZONE. */
-    public static double PARK_TIMEOUT_MS = 4000;
+    /**
+     * How long {@link #shootIfUpThenPark} gives the drive into the LOADING ZONE. Must cover the
+     * scoring side's, the longer of the two at about 86 in.
+     */
+    public static double PARK_TIMEOUT_MS = 5000;
+
+    /** How long {@link #driveToHiveThenShootAndPark} gives its first leg. */
+    public static double APPROACH_HIVE_TIMEOUT_MS = 3000;
+
+    /** How long {@link #driveToHiveThenShootAndPark} gives its second leg, about 108 in. */
+    public static double TO_HIVE_TIMEOUT_MS = 6000;
 
     /**
      * How long {@link #shootIfUp} watches for its target CELL to read up before giving up on
@@ -176,6 +185,25 @@ public final class ShootingRoutines {
                 Groups.sequential(
                         Commands.waitUntil(() -> readyToShoot(r, alliance)),
                         feed(r))
+        );
+    }
+
+    /**
+     * The scoring-side preload auto: follows {@code toApproachHive} and {@code toHive}, both
+     * built at init, to where it can see {@code target}, then {@link #shootIfUpThenPark}.
+     * Sequential on purpose (rule 5): it cannot read the CELL until it has arrived. If a leg
+     * times out, the routine carries on from wherever the robot got to.
+     *
+     * @param onDecided see {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}
+     */
+    public static Command driveToHiveThenShootAndPark(Robot r, Alliance alliance, Cell target,
+                                                      Path toApproachHive, Path toHive,
+                                                      Pose approachPark, Path park,
+                                                      Consumer<Boolean> onDecided) {
+        return Groups.sequential(
+                Timeouts.limit(r.drive.follow(toApproachHive), APPROACH_HIVE_TIMEOUT_MS),
+                Timeouts.limit(r.drive.follow(toHive), TO_HIVE_TIMEOUT_MS),
+                shootIfUpThenPark(r, alliance, target, approachPark, park, onDecided)
         );
     }
 

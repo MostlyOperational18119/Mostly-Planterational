@@ -16,24 +16,31 @@ import org.firstinspires.ftc.teamcode.subsystems.Outtake;
  */
 public final class OuttakeTuning {
 
-    private final double spinPower, targetRpm, kv, kp, spinUpMs, atSpeedTolerance;
+    private final double spinPower, targetRpm, kv, kp, ki, integralZone, maxIntegral, spinUpMs,
+            atSpeedTolerance;
 
     private OuttakeTuning() {
         spinPower = Outtake.SPIN_POWER;
         targetRpm = Outtake.TARGET_RPM;
         kv = Outtake.KV;
         kp = Outtake.KP;
+        ki = Outtake.KI;
+        integralZone = Outtake.INTEGRAL_ZONE_RPM;
+        maxIntegral = Outtake.MAX_INTEGRAL_POWER;
         spinUpMs = Outtake.SPIN_UP_MS;
         atSpeedTolerance = Outtake.AT_SPEED_TOLERANCE_RPM;
     }
 
-    /** Saves the current values, then sets open loop at 0.8 with the untuned gains. */
+    /** Saves the current values, then sets open loop at 0.8 with the untuned gains, no I. */
     public static OuttakeTuning pinForTests() {
         OuttakeTuning saved = new OuttakeTuning();
         Outtake.SPIN_POWER = 0.8;
         Outtake.TARGET_RPM = 0;
         Outtake.KV = 1.0 / 6000;
         Outtake.KP = 0.0005;
+        Outtake.KI = 0;
+        Outtake.INTEGRAL_ZONE_RPM = 500;
+        Outtake.MAX_INTEGRAL_POWER = 0.25;
         Outtake.SPIN_UP_MS = 1000;
         Outtake.AT_SPEED_TOLERANCE_RPM = 100;
         return saved;
@@ -44,6 +51,9 @@ public final class OuttakeTuning {
         Outtake.TARGET_RPM = targetRpm;
         Outtake.KV = kv;
         Outtake.KP = kp;
+        Outtake.KI = ki;
+        Outtake.INTEGRAL_ZONE_RPM = integralZone;
+        Outtake.MAX_INTEGRAL_POWER = maxIntegral;
         Outtake.SPIN_UP_MS = spinUpMs;
         Outtake.AT_SPEED_TOLERANCE_RPM = atSpeedTolerance;
     }

@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.pedropathing.api.Paths;
 import com.pedropathing.math.Pose;
 import com.pedropathing.ivy.Command;
 
@@ -267,6 +268,32 @@ public class ShootingRoutinesTest {
         assertTrue("never finished", runSeeingRedFarAt(routine, 49, 15000));
         assertTrue("did not shoot at an up CELL", fed());
         assertParked(paths);
+    }
+
+    @Test
+    public void theScoringRoutineDecidesOnlyOnceItHasDrivenToTheHive() {
+        Outtake.SPIN_UP_MS = 0;
+        ShootingRoutines.PRELOAD_FEED_MS = 200;
+        sim.camera.online = true;
+        // Short stand-ins for the field's legs: the sim runs in real time.
+        Pose approachHive = new Pose(0, 12, 0), hive = new Pose(12, 12, 0);
+        Pose approachPark = new Pose(12, 0, 0), park = new Pose(0, 0, 0);
+        Pose[] atDecision = new Pose[1];
+        Command routine = ShootingRoutines.driveToHiveThenShootAndPark(sim.robot, Alliance.RED,
+                Cell.RED_FAR,
+                Paths.line(AutoPaths.START, approachHive).constant(AutoPaths.START),
+                Paths.line(approachHive, hive).constant(AutoPaths.START),
+                approachPark,
+                Paths.line(approachPark, park).constant(AutoPaths.START),
+                shoot -> atDecision[0] = sim.pose());
+        routine.schedule();
+
+        assertTrue("never finished", runSeeingRedFarAt(routine, 49, 20000));
+        assertTrue("did not shoot at an up CELL", fed());
+        assertEquals("decided before arriving: x", hive.x(), atDecision[0].x(), 3);
+        assertEquals("decided before arriving: y", hive.y(), atDecision[0].y(), 3);
+        assertEquals("not parked: x", park.x(), sim.pose().x(), 2);
+        assertEquals("not parked: y", park.y(), sim.pose().y(), 2);
     }
 
     @Test

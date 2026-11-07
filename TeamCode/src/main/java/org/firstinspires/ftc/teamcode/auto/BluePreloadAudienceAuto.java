@@ -18,21 +18,21 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
 import org.firstinspires.ftc.teamcode.vision.CellSighting;
 
 /**
- * Red alliance: shoots the three preloaded pollen into the red HIVE's target CELL if vision
- * sees it facing up, then parks in the red LOADING ZONE. If the CELL is down, or never seen,
+ * Blue alliance: shoots the three preloaded pollen into the blue HIVE's target CELL if vision
+ * sees it facing up, then parks in the blue LOADING ZONE. If the CELL is down, or never seen,
  * it skips the shooting and only parks.
  *
- * <p>Starts as the red rectangular robot of the manual's Fig. 11-1 ({@link AutoPaths}): back
- * against the audience wall, centred on the third TILE from the red wall, facing the HIVE. So
- * the target is the AUDIENCE CELL, the near one from this start. The status line shows what
- * vision reads for it during init, and the decision is the reading at START. Parking needs
- * Pedro (a localizer and Foresight).
+ * <p>Starts as the red rectangular robot of the manual's Fig. 11-1, turned 180° for blue
+ * ({@link AutoPaths}): back against the rear wall, centred on the third TILE from the blue
+ * wall, facing the HIVE. So the target is the FAR CELL, the near one from this start. The
+ * status line shows what vision reads for it during init, and the decision is the reading at
+ * START. Parking needs Pedro (a localizer and Foresight).
  */
-@Autonomous(name = "Red: Preload Only", group = "BIOBUZZ")
-public class RedPreloadAuto extends LinearOpMode {
+@Autonomous(name = "Blue: Preload Audience", group = "BIOBUZZ")
+public class BluePreloadAudienceAuto extends LinearOpMode {
 
-    private static final Alliance ALLIANCE = Alliance.RED;
-    private static final Cell TARGET = Cell.RED_AUDIENCE;
+    private static final Alliance ALLIANCE = Alliance.BLUE;
+    private static final Cell TARGET = Cell.BLUE_FAR;
     private static final double AUTO_DEADLINE_MS = 28_000;
 
     private long startNanos, endNanos;

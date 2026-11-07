@@ -101,6 +101,24 @@ public class AutoPathsTest {
     }
 
     @Test
+    public void theScoringSideDrivesToTheHiveThroughItsApproach() {
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.SCORING);
+        assertEquals(0, paths.toApproachHive.get(0).x(), 1e-6);
+        assertEquals(0, paths.toApproachHive.get(0).y(), 1e-6);
+        assertEquals(paths.approachHive.x(), paths.toApproachHive.get(1).x(), 1e-6);
+        assertEquals(paths.approachHive.y(), paths.toApproachHive.get(1).y(), 1e-6);
+        assertEquals(paths.approachHive.x(), paths.toHive.get(0).x(), 1e-6);
+        assertEquals(paths.approachHive.y(), paths.toHive.get(0).y(), 1e-6);
+        assertEquals(paths.hive.x(), paths.toHive.get(1).x(), 1e-6);
+        assertEquals(paths.hive.y(), paths.toHive.get(1).y(), 1e-6);
+        // As distances from the walls: x grows away from the back wall, y toward the alliance wall.
+        assertEquals(AutoPaths.SCORING_HIVE_BACK_WALL_IN - AutoPaths.SCORING_START_FROM_BACK_WALL_IN,
+                paths.hive.x(), 1e-9);
+        assertEquals(AutoPaths.SCORING_START_FROM_ALLIANCE_WALL_IN - AutoPaths.SCORING_HIVE_ALLIANCE_WALL_IN,
+                paths.hive.y(), 1e-9);
+    }
+
+    @Test
     public void settingsChangedAfterOneBuildApplyToTheNext() {
         // Panels edits between OpModes must take effect without restarting the app.
         new AutoPaths(AutoPaths.Side.AUDIENCE);

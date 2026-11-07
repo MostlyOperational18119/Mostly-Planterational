@@ -49,6 +49,58 @@ public class OuttakeTest {
         outtake.write();
     }
 
+    /** Runs for {@code ms} against a flywheel making {@code rpmPerPower}, with inertia. */
+    private void runAgainstFlywheel(double rpmPerPower, long ms) throws InterruptedException {
+        double rpm = 0;
+        for (long end = System.nanoTime() + ms * 1_000_000; System.nanoTime() < end; ) {
+            measure(rpm);
+            cycle();
+            rpm += (rpmPerPower * motor.power() - rpm) * 0.02;
+            Thread.sleep(5);
+        }
+        measure(rpm);
+        outtake.read();
+    }
+
+    @Test
+    public void withoutTheIntegralALowKvSettlesUnderTarget() throws InterruptedException {
+        // The robot's symptom: 3250 rpm per power against KV = 1/5000 and P alone.
+        Outtake.KV = 1.0 / 5000;
+        Outtake.TARGET_RPM = 3000;
+        outtake.spin().schedule();
+        runAgainstFlywheel(3250, 1500);
+        assertEquals(2600, outtake.rpm(), 60);
+    }
+
+    @Test
+    public void theIntegralBringsALowKvUpToTarget() throws InterruptedException {
+        Outtake.KV = 1.0 / 5000;
+        Outtake.KI = 0.002;
+        Outtake.MAX_INTEGRAL_POWER = 0.5;
+        Outtake.TARGET_RPM = 3000;
+        outtake.spin().schedule();
+        runAgainstFlywheel(3250, 2500);
+        assertEquals(3000, outtake.rpm(), 30);
+        assertTrue(outtake.atSpeed());
+    }
+
+    @Test
+    public void theIntegralDoesNotWindUpOutsideItsZone() throws InterruptedException {
+        Outtake.KV = 1.0 / 6000;
+        Outtake.KI = 1;
+        Outtake.TARGET_RPM = 3000;
+        outtake.spin().schedule();
+        measure(0);
+        for (int i = 0; i < 10; i++) {
+            cycle();
+            Thread.sleep(2);
+        }
+        // At target only the feedforward and the integral are left; the integral must be empty.
+        measure(3000);
+        cycle();
+        assertEquals("wound up during spin-up", Outtake.KV * 3000, motor.power(), 0.02);
+    }
+
     @Test
     public void spinRunsAtSpinPowerUntilCancelled() {
         Command spin = outtake.spin();

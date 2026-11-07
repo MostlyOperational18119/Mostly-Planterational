@@ -24,6 +24,10 @@ import com.pedropathing.paths.Path;
  * <p>The audience-side and scoring-side autos each share one start, approach and park; pick
  * which with {@link Side}. A side's poses are in the frame of its own start ({@link #START}).
  *
+ * <p><b>The scoring side</b> starts where the HIVE's near CELL cannot be seen, so it drives
+ * first: across to {@link #approachHive}, then to {@link #hive}, the place it shoots from. From
+ * there it parks like the audience side, by {@link #approachPark} and {@link #toPark}.
+ *
  * <p>Built before {@code waitForStart()}, never mid-routine (architecture doc §8.1); the
  * fields are read then, so set them in Panels before pressing INIT.
  */
@@ -62,17 +66,46 @@ public final class AutoPaths {
     /** See {@link #AUDIENCE_PARK_FROM_BACK_WALL_IN}. */
     public static double AUDIENCE_PARK_FROM_ALLIANCE_WALL_IN = 10;
 
-    // START FOR SCORING SIDE
-    // PLACEHOLDERS: copies of the audience side's values until the real poses are measured.
-    // Same meaning as above: inches from the back wall and from the alliance wall.
+    // SCORING SIDE
+    // Same meaning as above: inches from the back wall and from the alliance wall. Not yet
+    // driven on a field.
+
+    //Start pose
     public static double SCORING_START_FROM_BACK_WALL_IN = 120;
-    public static double SCORING_START_FROM_ALLIANCE_WALL_IN = 10;
-    public static double SCORING_APPROACH_PARK_BACK_WALL_IN = 36;
-    public static double SCORING_APPROACH_PARK_ALLIANCE_WALL_IN = 30;
+    public static double SCORING_START_FROM_ALLIANCE_WALL_IN = 9;
+
+    //Start - Hive prep pose: straight out from the start position, preparing to move underneath the hive to the scoring location
+    public static double SCORING_APPROACH_HIVE_BACK_WALL_IN = 120;
+    public static double SCORING_APPROACH_HIVE_ALLIANCE_WALL_IN = 68;
+
+    //Hive pose: launching location
+    public static double SCORING_HIVE_BACK_WALL_IN = 12;
+    public static double SCORING_HIVE_ALLIANCE_WALL_IN = 64;
+
+    //Hive - Park prep pose: same as above
+    public static double SCORING_APPROACH_PARK_BACK_WALL_IN = 120;
+    public static double SCORING_APPROACH_PARK_ALLIANCE_WALL_IN = 68;
+
+    //Park pose: same as above
     public static double SCORING_PARK_FROM_BACK_WALL_IN = 120;
     public static double SCORING_PARK_FROM_ALLIANCE_WALL_IN = 10;
 
     public static final Pose START = new Pose(0, 0, 0);
+
+    /** Scoring side only, else null: the first stop on the way to {@link #hive}. */
+    public final Pose approachHive;
+
+    /** Scoring side only, else null: where the robot shoots from, facing as at the start. */
+    public final Pose hive;
+
+    /** Scoring side only, else null: from the start to {@link #approachHive}. */
+    public final Path toApproachHive;
+
+    /**
+     * Scoring side only, else null: from {@link #approachHive} to {@link #hive}. Crosses the
+     * HIVE's footprint on purpose: the team confirmed the robot can pass there.
+     */
+    public final Path toHive;
 
     /**
      * Beside the HIVE, facing as at the start. Reached with {@code Drive.hold} from wherever
@@ -93,12 +126,23 @@ public final class AutoPaths {
                     AUDIENCE_START_FROM_BACK_WALL_IN, AUDIENCE_START_FROM_ALLIANCE_WALL_IN);
             park = fromWalls(AUDIENCE_PARK_FROM_BACK_WALL_IN, AUDIENCE_PARK_FROM_ALLIANCE_WALL_IN,
                     AUDIENCE_START_FROM_BACK_WALL_IN, AUDIENCE_START_FROM_ALLIANCE_WALL_IN);
+            approachHive = null;
+            hive = null;
+            toApproachHive = null;
+            toHive = null;
         } else {
             approachPark = fromWalls(SCORING_APPROACH_PARK_BACK_WALL_IN,
                     SCORING_APPROACH_PARK_ALLIANCE_WALL_IN,
                     SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN);
             park = fromWalls(SCORING_PARK_FROM_BACK_WALL_IN, SCORING_PARK_FROM_ALLIANCE_WALL_IN,
                     SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN);
+            approachHive = fromWalls(SCORING_APPROACH_HIVE_BACK_WALL_IN,
+                    SCORING_APPROACH_HIVE_ALLIANCE_WALL_IN,
+                    SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN);
+            hive = fromWalls(SCORING_HIVE_BACK_WALL_IN, SCORING_HIVE_ALLIANCE_WALL_IN,
+                    SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN);
+            toApproachHive = Paths.line(START, approachHive).constant(START);
+            toHive = Paths.line(approachHive, hive).constant(START);
         }
         toPark = Paths.line(approachPark, park).constant(START);
     }
