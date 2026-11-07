@@ -69,6 +69,8 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     AutoPaths.java — every auto's Paths, from the manual's field drawings;
 │                     audience and scoring sides have their own start, approach and park,
 │                     each set shared by both alliances (the field is 180° symmetric)
+│                     AutoPaths.java — every auto's Paths, from the manual's field drawings;
+│                     one set for both alliances (the field is 180° symmetric)
 └── teleop/           DriveTeleOp.java — driver control on the loop contract; hold Y to shoot
                       ShotCalibration.java — measures the flywheel, records SHOT_POINTS
                       DriveMotorTest.java — one drive motor at a time (disabled)
