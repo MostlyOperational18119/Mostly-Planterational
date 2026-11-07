@@ -63,7 +63,7 @@ import java.util.function.DoubleSupplier;
 public class Outtake implements Subsystem {
 
     /** Flip this, not the power sign, if the flywheel spins backwards. */
-    private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.FORWARD;
+    private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.REVERSE;
 
     /**
      * Encoder counts per motor revolution, 1:1 to the flywheel. 28 is what goBILDA's geared

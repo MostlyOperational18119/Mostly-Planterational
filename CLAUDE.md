@@ -61,8 +61,11 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     shoots 3 if the AUDIENCE CELL is up, then parks
 │                     BluePreloadAuto.java — "Blue: Preload Only", the same from the rear
 │                     wall, targeting the FAR CELL
+│                     RedPreloadScoringAuto / BluePreloadScoringAuto — "Red/Blue: Preload
+│                     Scoring", the same routines from the scoring side's poses (placeholders)
 │                     AutoPaths.java — every auto's Paths, from the manual's field drawings;
-│                     one set for both alliances (the field is 180° symmetric)
+│                     audience and scoring sides have their own start, approach and park,
+│                     each set shared by both alliances (the field is 180° symmetric)
 └── teleop/           DriveTeleOp.java — driver control on the loop contract; hold Y to shoot
                       ShotCalibration.java — measures the flywheel, records SHOT_POINTS
                       DriveMotorTest.java — one drive motor at a time (disabled)

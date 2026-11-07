@@ -259,9 +259,9 @@ public class ShootingRoutinesTest {
         Outtake.SPIN_UP_MS = 0;
         ShootingRoutines.PRELOAD_FEED_MS = 200;
         sim.camera.online = true;
-        AutoPaths paths = new AutoPaths();
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         Command routine = ShootingRoutines.shootIfUpThenPark(sim.robot, Alliance.RED,
-                Cell.RED_FAR, paths.approach, paths.toPark, shoot -> {});
+                Cell.RED_FAR, paths.approachPark, paths.toPark, shoot -> {});
         routine.schedule();
 
         assertTrue("never finished", runSeeingRedFarAt(routine, 49, 15000));
@@ -273,9 +273,9 @@ public class ShootingRoutinesTest {
     public void parksWithoutShootingWhenTheTargetCellIsDown() {
         ShootingRoutines.DECIDE_TIMEOUT_MS = 200;
         sim.camera.online = true;
-        AutoPaths paths = new AutoPaths();
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         Command routine = ShootingRoutines.shootIfUpThenPark(sim.robot, Alliance.RED,
-                Cell.RED_FAR, paths.approach, paths.toPark, shoot -> {});
+                Cell.RED_FAR, paths.approachPark, paths.toPark, shoot -> {});
         routine.schedule();
 
         assertTrue("never finished", runSeeingRedFarAt(routine, 34, 15000));

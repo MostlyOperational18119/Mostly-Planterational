@@ -20,22 +20,22 @@ public class AutoPathsTest {
 
     @Before
     public void save() {
-        startBack = AutoPaths.START_FROM_BACK_WALL_IN;
-        startSide = AutoPaths.START_FROM_ALLIANCE_WALL_IN;
-        approachBack = AutoPaths.APPROACH_FROM_BACK_WALL_IN;
-        approachSide = AutoPaths.APPROACH_FROM_ALLIANCE_WALL_IN;
-        parkBack = AutoPaths.PARK_FROM_BACK_WALL_IN;
-        parkSide = AutoPaths.PARK_FROM_ALLIANCE_WALL_IN;
+        startBack = AutoPaths.AUDIENCE_START_FROM_BACK_WALL_IN;
+        startSide = AutoPaths.AUDIENCE_START_FROM_ALLIANCE_WALL_IN;
+        approachBack = AutoPaths.AUDIENCE_APPROACH_PARK_BACK_WALL_IN;
+        approachSide = AutoPaths.AUDIENCE_APPROACH_PARK_ALLIANCE_WALL_IN;
+        parkBack = AutoPaths.AUDIENCE_PARK_FROM_BACK_WALL_IN;
+        parkSide = AutoPaths.AUDIENCE_PARK_FROM_ALLIANCE_WALL_IN;
     }
 
     @After
     public void restore() {
-        AutoPaths.START_FROM_BACK_WALL_IN = startBack;
-        AutoPaths.START_FROM_ALLIANCE_WALL_IN = startSide;
-        AutoPaths.APPROACH_FROM_BACK_WALL_IN = approachBack;
-        AutoPaths.APPROACH_FROM_ALLIANCE_WALL_IN = approachSide;
-        AutoPaths.PARK_FROM_BACK_WALL_IN = parkBack;
-        AutoPaths.PARK_FROM_ALLIANCE_WALL_IN = parkSide;
+        AutoPaths.AUDIENCE_START_FROM_BACK_WALL_IN = startBack;
+        AutoPaths.AUDIENCE_START_FROM_ALLIANCE_WALL_IN = startSide;
+        AutoPaths.AUDIENCE_APPROACH_PARK_BACK_WALL_IN = approachBack;
+        AutoPaths.AUDIENCE_APPROACH_PARK_ALLIANCE_WALL_IN = approachSide;
+        AutoPaths.AUDIENCE_PARK_FROM_BACK_WALL_IN = parkBack;
+        AutoPaths.AUDIENCE_PARK_FROM_ALLIANCE_WALL_IN = parkSide;
     }
 
     /** The FTC size limit; the robot's real footprint is not recorded anywhere. */
@@ -51,28 +51,27 @@ public class AutoPathsTest {
 
     /** Start-frame pose back to distance from the back wall. */
     private static double fromBackWall(Pose p) {
-        return p.x() + AutoPaths.START_FROM_BACK_WALL_IN;
+        return p.x() + AutoPaths.AUDIENCE_START_FROM_BACK_WALL_IN;
     }
 
     /** Start-frame pose back to distance from the alliance wall. */
     private static double fromAllianceWall(Pose p) {
-        return AutoPaths.START_FROM_ALLIANCE_WALL_IN - p.y();
+        return AutoPaths.AUDIENCE_START_FROM_ALLIANCE_WALL_IN - p.y();
     }
 
     @Test
     public void theStartFrameIsTheRobotAtTheStart() {
-        Pose start = AutoPaths.fromWalls(AutoPaths.START_FROM_BACK_WALL_IN,
-                AutoPaths.START_FROM_ALLIANCE_WALL_IN);
+        Pose start = AutoPaths.fromWalls(9, 60, 9, 60);
         assertEquals(0, start.x(), 1e-9);
         assertEquals(0, start.y(), 1e-9);
         // Toward the alliance wall is the robot's left (+y).
-        assertTrue(AutoPaths.fromWalls(9, 30).y() > 0);
+        assertTrue(AutoPaths.fromWalls(9, 30, 9, 60).y() > 0);
     }
 
     @Test
     public void theRouteToTheZoneNeverTouchesTheHive() {
         // Heading is held at the start's along the route, so the robot stays axis-aligned.
-        AutoPaths paths = new AutoPaths();
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         for (int i = 0; i <= 1000; i++) {
             Pose p = paths.toPark.get(i / 1000.0);
             double back = fromBackWall(p), side = fromAllianceWall(p);
@@ -84,12 +83,12 @@ public class AutoPathsTest {
             }
         }
         assertTrue("approach is not short of the HIVE",
-                fromBackWall(paths.approach) + HALF_ROBOT_IN < HIVE_FROM_BACK_WALL_IN);
+                fromBackWall(paths.approachPark) + HALF_ROBOT_IN < HIVE_FROM_BACK_WALL_IN);
     }
 
     @Test
     public void itParksPartlyInTheLoadingZoneAndOffTheWall() {
-        AutoPaths paths = new AutoPaths();
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         Pose end = paths.toPark.get(1);
         double back = fromBackWall(end), side = fromAllianceWall(end);
         // PARK needs the robot only partly in the zone (§10.5.4): its footprint must overlap.
@@ -104,8 +103,45 @@ public class AutoPathsTest {
     @Test
     public void settingsChangedAfterOneBuildApplyToTheNext() {
         // Panels edits between OpModes must take effect without restarting the app.
-        new AutoPaths();
-        AutoPaths.PARK_FROM_BACK_WALL_IN = 100;
-        assertEquals(100 - AutoPaths.START_FROM_BACK_WALL_IN, new AutoPaths().park.x(), 1e-9);
+        new AutoPaths(AutoPaths.Side.AUDIENCE);
+        AutoPaths.AUDIENCE_PARK_FROM_BACK_WALL_IN = 100;
+        assertEquals(100 - AutoPaths.AUDIENCE_START_FROM_BACK_WALL_IN, new AutoPaths(AutoPaths.Side.AUDIENCE).park.x(), 1e-9);
+    }
+
+    @Test
+    public void eachSideUsesOnlyItsOwnSettings() {
+        double[] scoring = {AutoPaths.SCORING_START_FROM_BACK_WALL_IN,
+                AutoPaths.SCORING_START_FROM_ALLIANCE_WALL_IN,
+                AutoPaths.SCORING_APPROACH_PARK_BACK_WALL_IN,
+                AutoPaths.SCORING_APPROACH_PARK_ALLIANCE_WALL_IN,
+                AutoPaths.SCORING_PARK_FROM_BACK_WALL_IN,
+                AutoPaths.SCORING_PARK_FROM_ALLIANCE_WALL_IN};
+        Pose audiencePark = new AutoPaths(AutoPaths.Side.AUDIENCE).park;
+        try {
+            AutoPaths.SCORING_START_FROM_BACK_WALL_IN = 10;
+            AutoPaths.SCORING_START_FROM_ALLIANCE_WALL_IN = 40;
+            AutoPaths.SCORING_APPROACH_PARK_BACK_WALL_IN = 50;
+            AutoPaths.SCORING_APPROACH_PARK_ALLIANCE_WALL_IN = 25;
+            AutoPaths.SCORING_PARK_FROM_BACK_WALL_IN = 100;
+            AutoPaths.SCORING_PARK_FROM_ALLIANCE_WALL_IN = 15;
+
+            AutoPaths paths = new AutoPaths(AutoPaths.Side.SCORING);
+            assertEquals(40, paths.approachPark.x(), 1e-9);
+            assertEquals(15, paths.approachPark.y(), 1e-9);
+            assertEquals(90, paths.park.x(), 1e-9);
+            assertEquals(25, paths.park.y(), 1e-9);
+            assertEquals(90, paths.toPark.get(1).x(), 1e-6);
+
+            Pose unchanged = new AutoPaths(AutoPaths.Side.AUDIENCE).park;
+            assertEquals(audiencePark.x(), unchanged.x(), 1e-9);
+            assertEquals(audiencePark.y(), unchanged.y(), 1e-9);
+        } finally {
+            AutoPaths.SCORING_START_FROM_BACK_WALL_IN = scoring[0];
+            AutoPaths.SCORING_START_FROM_ALLIANCE_WALL_IN = scoring[1];
+            AutoPaths.SCORING_APPROACH_PARK_BACK_WALL_IN = scoring[2];
+            AutoPaths.SCORING_APPROACH_PARK_ALLIANCE_WALL_IN = scoring[3];
+            AutoPaths.SCORING_PARK_FROM_BACK_WALL_IN = scoring[4];
+            AutoPaths.SCORING_PARK_FROM_ALLIANCE_WALL_IN = scoring[5];
+        }
     }
 }

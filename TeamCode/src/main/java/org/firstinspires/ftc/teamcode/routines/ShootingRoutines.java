@@ -11,7 +11,6 @@ import com.pedropathing.paths.Path;
 import org.firstinspires.ftc.teamcode.Robot;
 import org.firstinspires.ftc.teamcode.field.Alliance;
 import org.firstinspires.ftc.teamcode.field.Cell;
-import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.util.RangeController;
 import org.firstinspires.ftc.teamcode.util.Timeouts;
 
@@ -82,9 +81,9 @@ public final class ShootingRoutines {
 
     private ShootingRoutines() {}
 
-    /** {@link #feed(Robot, double)} at the regular {@code Intake.COLLECT_POWER}: TeleOp's. */
+    /** {@link #feed(Robot, double)} at {@code Intake.COLLECT_POWER} as it starts: TeleOp's. */
     public static CommandBuilder feed(Robot r) {
-        return feed(r, Intake.COLLECT_POWER);
+        return Groups.parallel(r.transfer.feed(), r.intake.collect());
     }
 
     /**

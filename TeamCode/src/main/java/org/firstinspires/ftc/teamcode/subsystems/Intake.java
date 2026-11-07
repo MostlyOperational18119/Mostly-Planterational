@@ -13,6 +13,8 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.teamcode.util.Subsystem;
 import org.firstinspires.ftc.teamcode.util.WriteGate;
 
+import java.util.function.DoubleSupplier;
+
 /**
  * The intake: one open-loop motor, {@code "intake"} in the hardware configuration.
  *
@@ -37,8 +39,9 @@ public class Intake implements Subsystem {
     /** Flip this, not the power signs, if the intake runs backwards. */
     private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.REVERSE;
 
-    public static final double COLLECT_POWER = 0.5;
-    public static final double EJECT_POWER = -0.6;
+    // Panels-editable; a command reads them when it starts, so an edit applies on the next press.
+    public static double COLLECT_POWER = 0.8;
+    public static double EJECT_POWER = -0.6;
 
     private final DcMotorEx motor;
     private final WriteGate powerGate = new WriteGate(WriteGate.MOTOR_POWER);
@@ -95,12 +98,12 @@ public class Intake implements Subsystem {
 
     /** Pulls game elements in until the command ends. */
     public CommandBuilder collect() {
-        return run(COLLECT_POWER);
+        return run(() -> COLLECT_POWER);
     }
 
     /** Pushes game elements out until the command ends. */
     public CommandBuilder eject() {
-        return run(EJECT_POWER);
+        return run(() -> EJECT_POWER);
     }
 
     /**
@@ -112,8 +115,13 @@ public class Intake implements Subsystem {
      * the motor never gets a zero in between.
      */
     public CommandBuilder run(double power) {
+        return run(() -> power);
+    }
+
+    /** {@link #run(double)} with the power read each time the command starts. */
+    public CommandBuilder run(DoubleSupplier power) {
         return Command.build()
-                .setStart(() -> this.power = power)
+                .setStart(() -> this.power = power.getAsDouble())
                 .setDone(() -> false)
                 .setEnd(endCondition -> this.power = 0)
                 .requiring(this);

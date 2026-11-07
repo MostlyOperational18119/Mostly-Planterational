@@ -35,6 +35,20 @@ public class IntakeTest {
     }
 
     @Test
+    public void aPanelsEditAppliesTheNextTimeTheCommandStarts() {
+        double original = Intake.COLLECT_POWER;
+        try {
+            Command collect = intake.collect();
+            Intake.COLLECT_POWER = 0.25;
+            collect.schedule();
+            cycle();
+            assertEquals(0.25, motor.power(), 0.0);
+        } finally {
+            Intake.COLLECT_POWER = original;
+        }
+    }
+
+    @Test
     public void collectRunsWhileScheduledAndStopsWhenCancelled() {
         Command collect = intake.collect();
         collect.schedule();

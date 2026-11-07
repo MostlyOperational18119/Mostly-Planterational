@@ -21,20 +21,26 @@ import com.pedropathing.paths.Path;
  * <em>alliance wall</em> (the alliance's own side wall, where its LOADING ZONE is). Measured
  * from the manual (field 144 in square, TILES 24 in) — check them on a real field.
  *
+ * <p>The audience-side and scoring-side autos each share one start, approach and park; pick
+ * which with {@link Side}. A side's poses are in the frame of its own start ({@link #START}).
+ *
  * <p>Built before {@code waitForStart()}, never mid-routine (architecture doc §8.1); the
  * fields are read then, so set them in Panels before pressing INIT.
  */
 @Configurable
 public final class AutoPaths {
 
-    /** The robot's centre at the start: half its length off the back wall, inches. */
-    public static double START_FROM_BACK_WALL_IN = 9;
+    /** Which set of poses an auto uses. */
+    public enum Side { AUDIENCE, SCORING }
 
+    // START FOR AUDIENCE SIDE
+    /** The robot's centre at the start: half its length off the back wall, inches. */
+    public static double AUDIENCE_START_FROM_BACK_WALL_IN = 9;
     /**
      * The robot's centre at the start: the middle of the third TILE from the alliance wall —
      * in line with the HIVE, as in Fig. 11-1 — inches.
      */
-    public static double START_FROM_ALLIANCE_WALL_IN = 60;
+    public static double AUDIENCE_START_FROM_ALLIANCE_WALL_IN = 60;
 
     /**
      * Where the robot heads after shooting, to get round the HIVE: short of its near end and
@@ -42,9 +48,9 @@ public final class AutoPaths {
      * starts 47 in from the alliance wall (Fig. 11-1), so from here an 18 in robot clears it by
      * 7 in or more all the way up to the LOADING ZONE. Inches.
      */
-    public static double APPROACH_FROM_BACK_WALL_IN = 36;
-    /** See {@link #APPROACH_FROM_BACK_WALL_IN}. */
-    public static double APPROACH_FROM_ALLIANCE_WALL_IN = 30;
+    public static double AUDIENCE_APPROACH_PARK_BACK_WALL_IN = 36;
+    /** See {@link #AUDIENCE_APPROACH_PARK_BACK_WALL_IN}. */
+    public static double AUDIENCE_APPROACH_PARK_ALLIANCE_WALL_IN = 30;
 
     /**
      * Where the robot parks: in the alliance's LOADING ZONE, which runs 96–120 in from the back
@@ -52,9 +58,19 @@ public final class AutoPaths {
      * partly in it (§10.5.4); centred 12 in off the wall, an 18 in robot spans 3–21 in, 8 in
      * of it inside the zone and clear of the wall. Inches.
      */
-    public static double PARK_FROM_BACK_WALL_IN = 92;
-    /** See {@link #PARK_FROM_BACK_WALL_IN}. */
-    public static double PARK_FROM_ALLIANCE_WALL_IN = 12;
+    public static double AUDIENCE_PARK_FROM_BACK_WALL_IN = 92;
+    /** See {@link #AUDIENCE_PARK_FROM_BACK_WALL_IN}. */
+    public static double AUDIENCE_PARK_FROM_ALLIANCE_WALL_IN = 10;
+
+    // START FOR SCORING SIDE
+    // PLACEHOLDERS: copies of the audience side's values until the real poses are measured.
+    // Same meaning as above: inches from the back wall and from the alliance wall.
+    public static double SCORING_START_FROM_BACK_WALL_IN = 120;
+    public static double SCORING_START_FROM_ALLIANCE_WALL_IN = 10;
+    public static double SCORING_APPROACH_PARK_BACK_WALL_IN = 36;
+    public static double SCORING_APPROACH_PARK_ALLIANCE_WALL_IN = 30;
+    public static double SCORING_PARK_FROM_BACK_WALL_IN = 120;
+    public static double SCORING_PARK_FROM_ALLIANCE_WALL_IN = 10;
 
     public static final Pose START = new Pose(0, 0, 0);
 
@@ -62,18 +78,35 @@ public final class AutoPaths {
      * Beside the HIVE, facing as at the start. Reached with {@code Drive.hold} from wherever
      * shooting left the robot, so it needs no path built mid-routine.
      */
-    public final Pose approach = fromWalls(APPROACH_FROM_BACK_WALL_IN,
-            APPROACH_FROM_ALLIANCE_WALL_IN);
+    public final Pose approachPark;
 
     /** In the LOADING ZONE, facing as at the start. */
-    public final Pose park = fromWalls(PARK_FROM_BACK_WALL_IN, PARK_FROM_ALLIANCE_WALL_IN);
+    public final Pose park;
 
-    /** From {@link #approach} up the alliance-wall side of the HIVE into the LOADING ZONE. */
-    public final Path toPark = Paths.line(approach, park).constant(START);
+    /** From {@link #approachPark} up the alliance-wall side of the HIVE into the LOADING ZONE. */
+    public final Path toPark;
 
-    /** A field position, as distances from the back and alliance walls, in the start frame. */
-    static Pose fromWalls(double fromBackWallIn, double fromAllianceWallIn) {
-        return new Pose(fromBackWallIn - START_FROM_BACK_WALL_IN,
-                START_FROM_ALLIANCE_WALL_IN - fromAllianceWallIn, START.heading());
+    public AutoPaths(Side side) {
+        if (side == Side.AUDIENCE) {
+            approachPark = fromWalls(AUDIENCE_APPROACH_PARK_BACK_WALL_IN,
+                    AUDIENCE_APPROACH_PARK_ALLIANCE_WALL_IN,
+                    AUDIENCE_START_FROM_BACK_WALL_IN, AUDIENCE_START_FROM_ALLIANCE_WALL_IN);
+            park = fromWalls(AUDIENCE_PARK_FROM_BACK_WALL_IN, AUDIENCE_PARK_FROM_ALLIANCE_WALL_IN,
+                    AUDIENCE_START_FROM_BACK_WALL_IN, AUDIENCE_START_FROM_ALLIANCE_WALL_IN);
+        } else {
+            approachPark = fromWalls(SCORING_APPROACH_PARK_BACK_WALL_IN,
+                    SCORING_APPROACH_PARK_ALLIANCE_WALL_IN,
+                    SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN);
+            park = fromWalls(SCORING_PARK_FROM_BACK_WALL_IN, SCORING_PARK_FROM_ALLIANCE_WALL_IN,
+                    SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN);
+        }
+        toPark = Paths.line(approachPark, park).constant(START);
+    }
+
+    /** A field position, as distances from the back and alliance walls, in a start's frame. */
+    static Pose fromWalls(double fromBackWallIn, double fromAllianceWallIn,
+                          double startFromBackWallIn, double startFromAllianceWallIn) {
+        return new Pose(fromBackWallIn - startFromBackWallIn,
+                startFromAllianceWallIn - fromAllianceWallIn, START.heading());
     }
 }

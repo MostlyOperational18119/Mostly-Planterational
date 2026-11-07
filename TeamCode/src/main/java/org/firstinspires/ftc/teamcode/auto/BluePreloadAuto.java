@@ -57,7 +57,7 @@ public class BluePreloadAuto extends LinearOpMode {
         Robot robot = Robot.fromHardwareMap(hardwareMap)
                 .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry(), telemetry);
         robot.withStatus(() -> status(robot));
-        AutoPaths paths = new AutoPaths();
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         robot.follower.setPose(AutoPaths.START);
 
         while (opModeInInit()) {
@@ -67,7 +67,7 @@ public class BluePreloadAuto extends LinearOpMode {
         // Failure containment (§8.4): ends on finishing, the deadline, or losing localization.
         Command routine = Groups.race(
                 ShootingRoutines.shootIfUpThenPark(robot, ALLIANCE, TARGET,
-                        paths.approach, paths.toPark, shoot -> decision = String.format(
+                        paths.approachPark, paths.toPark, shoot -> decision = String.format(
                                 "%s at %.1fs (%s)", shoot ? "SHOOTING" : "NOT SHOOTING",
                                 (System.nanoTime() - startNanos) / 1e9, reading(robot))),
                 Timeouts.command(AUTO_DEADLINE_MS),

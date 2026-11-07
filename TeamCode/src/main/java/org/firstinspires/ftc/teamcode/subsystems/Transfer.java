@@ -13,6 +13,8 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.teamcode.util.Subsystem;
 import org.firstinspires.ftc.teamcode.util.WriteGate;
 
+import java.util.function.DoubleSupplier;
+
 /**
  * The transfer: one open-loop motor, {@code "transfer"} in the hardware configuration, that
  * carries pollen up from the intake and feeds it into the {@link Outtake} flywheel from
@@ -40,8 +42,9 @@ public class Transfer implements Subsystem {
      */
     private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.FORWARD;
 
-    public static final double FEED_POWER = 0.6;
-    public static final double REVERSE_POWER = -0.6;
+    // Panels-editable; a command reads them when it starts, so an edit applies on the next press.
+    public static double FEED_POWER = 0.6;
+    public static double REVERSE_POWER = -0.6;
 
     private final DcMotorEx motor;
     private final WriteGate powerGate = new WriteGate(WriteGate.MOTOR_POWER);
@@ -98,18 +101,23 @@ public class Transfer implements Subsystem {
 
     /** Carries pollen up into the flywheel until the command ends. */
     public CommandBuilder feed() {
-        return run(FEED_POWER);
+        return run(() -> FEED_POWER);
     }
 
     /** Runs the transfer back down towards the intake until the command ends. */
     public CommandBuilder reverse() {
-        return run(REVERSE_POWER);
+        return run(() -> REVERSE_POWER);
     }
 
     /** Holds {@code power} while scheduled; zero on any end. */
     public CommandBuilder run(double power) {
+        return run(() -> power);
+    }
+
+    /** {@link #run(double)} with the power read each time the command starts. */
+    public CommandBuilder run(DoubleSupplier power) {
         return Command.build()
-                .setStart(() -> this.power = power)
+                .setStart(() -> this.power = power.getAsDouble())
                 .setDone(() -> false)
                 .setEnd(endCondition -> this.power = 0)
                 .requiring(this);
