@@ -22,13 +22,13 @@ import org.firstinspires.ftc.teamcode.vision.CellSighting;
  * sees it facing up, then parks in the blue LOADING ZONE. If the CELL is down, or never seen,
  * it skips the shooting and only parks.
  *
- * <p>Starts as the red rectangular robot of the manual's Fig. 11-1, turned 180° for blue
- * ({@link AutoPaths}): back against the rear wall, centred on the third TILE from the blue
- * wall, facing the HIVE. So the target is the FAR CELL, the near one from this start. The
- * status line shows what vision reads for it during init, and the decision is the reading at
- * START. Parking needs Pedro (a localizer and Foresight).
+ * <p>{@link BluePreloadScoringAuto} from the scoring side: same target (the FAR CELL), but
+ * the start cannot see it, so it first drives to the shooting spot
+ * ({@link AutoPaths.Side#SCORING}) and decides on arrival. The status line shows what vision
+ * reads for the target until then. Driving there and parking need Pedro (a localizer and
+ * Foresight).
  */
-@Autonomous(name = "Blue: Preload Audience", group = "BIOBUZZ")
+@Autonomous(name = "Blue: Preload Scoring", group = "BIOBUZZ")
 public class BluePreloadAudienceAuto extends LinearOpMode {
 
     private static final Alliance ALLIANCE = Alliance.BLUE;
@@ -36,7 +36,7 @@ public class BluePreloadAudienceAuto extends LinearOpMode {
     private static final double AUTO_DEADLINE_MS = 28_000;
 
     private long startNanos, endNanos;
-    /** What was decided at START, and the reading behind it; null until then. */
+    /** What was decided on arrival, and the reading behind it; null until then. */
     private String decision;
 
     @Override
@@ -57,7 +57,7 @@ public class BluePreloadAudienceAuto extends LinearOpMode {
         Robot robot = Robot.fromHardwareMap(hardwareMap)
                 .withTelemetry(PanelsTelemetry.INSTANCE.getTelemetry(), telemetry);
         robot.withStatus(() -> status(robot));
-        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.SCORING);
         robot.follower.setPose(AutoPaths.START);
 
         while (opModeInInit()) {
@@ -66,7 +66,8 @@ public class BluePreloadAudienceAuto extends LinearOpMode {
 
         // Failure containment (§8.4): ends on finishing, the deadline, or losing localization.
         Command routine = Groups.race(
-                ShootingRoutines.shootIfUpThenPark(robot, ALLIANCE, TARGET,
+                ShootingRoutines.driveToHiveThenShootAndPark(robot, ALLIANCE, TARGET,
+                        paths.toApproachHive, paths.toHive,
                         paths.approachPark, paths.toPark, shoot -> decision = String.format(
                                 "%s at %.1fs (%s)", shoot ? "SHOOTING" : "NOT SHOOTING",
                                 (System.nanoTime() - startNanos) / 1e9, reading(robot))),
@@ -100,14 +101,14 @@ public class BluePreloadAudienceAuto extends LinearOpMode {
      * thing to look for when the robot does not shoot at an up CELL.
      */
     private String reading(Robot robot) {
-        if (!robot.vision.hasFix()) return "vision " + robot.vision.status() + " — will only park";
+        if (!robot.vision.hasFix()) return "vision " + robot.vision.status() + " — would only park";
         Cell up = robot.vision.upCell(ALLIANCE);
         CellSighting seen = robot.vision.sighting(TARGET);
         String height = seen == null ? "target not in view"
                 : String.format("target %.1f in high, %.1f in away (up ≥ %.1f)", seen.z,
                         seen.floorDistance(), Vision.UP_CELL_MIN_HEIGHT_IN);
-        String verdict = up == null ? "no " + ALLIANCE + " CELL seen — will only park"
-                : up == TARGET ? "UP — will shoot, then park" : "DOWN — will only park";
+        String verdict = up == null ? "no " + ALLIANCE + " CELL seen — would only park"
+                : up == TARGET ? "UP — would shoot, then park" : "DOWN — would only park";
         return verdict + "; " + height;
     }
 }

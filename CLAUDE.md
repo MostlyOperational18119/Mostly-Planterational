@@ -64,6 +64,8 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     RedPreloadScoringAuto / BluePreloadScoringAuto — "Red/Blue: Preload
 │                     Scoring": from the scoring-side start, drive to the shooting spot, then
 │                     the same shoot-if-up and park (not yet driven on a field)
+│                     BlueAutoMenu — "Blue: Auto Menu": picks a preset auto in init (dpad
+│                     up/down), each an Option naming its side and routine
 │                     AutoPaths.java — every auto's Paths, from the manual's field drawings;
 │                     audience and scoring sides have their own start, approach and park,
 │                     each set shared by both alliances (the field is 180° symmetric)
@@ -79,6 +81,7 @@ TeamCode/src/test/java/org/firstinspires/ftc/teamcode/
 ├── vision/           tier 1: FieldFrame, ClusterFit
 ├── field/            tier 1: CellTest (tag IDs against the manual)
 ├── auto/             tier 1: AutoPathsTest (park route clears the HIVE, ends in the zone)
+│                     tier 2: BlueAutoMenuTest (every menu option builds and finishes)
 ├── subsystems/       tier 2: IntakeTest, TransferTest, OuttakeTest, DriveTest, VisionTest,
 │                     BatteryTest
 ├── routines/         tier 2: TestRoutinesTest, ShootingRoutinesTest

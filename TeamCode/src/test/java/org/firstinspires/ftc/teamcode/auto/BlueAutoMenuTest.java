@@ -1,0 +1,69 @@
+package org.firstinspires.ftc.teamcode.auto;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import com.pedropathing.ivy.Command;
+import com.pedropathing.math.Pose;
+
+import org.firstinspires.ftc.teamcode.field.Alliance;
+import org.firstinspires.ftc.teamcode.field.Cell;
+import org.firstinspires.ftc.teamcode.routines.ShootingRoutines;
+import org.firstinspires.ftc.teamcode.sim.SimRobot;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+/** Every menu option on the simulated robot, and moving through the menu. */
+public class BlueAutoMenuTest {
+
+    private double approachHive, toHive, decide, approach, park;
+
+    @Before
+    public void shortenTheLegs() {
+        // The sim runs in real time. Termination is what is asserted, so the legs need not
+        // arrive; the timeouts end them.
+        approachHive = ShootingRoutines.APPROACH_HIVE_TIMEOUT_MS;
+        toHive = ShootingRoutines.TO_HIVE_TIMEOUT_MS;
+        decide = ShootingRoutines.DECIDE_TIMEOUT_MS;
+        approach = ShootingRoutines.APPROACH_TIMEOUT_MS;
+        park = ShootingRoutines.PARK_TIMEOUT_MS;
+        ShootingRoutines.APPROACH_HIVE_TIMEOUT_MS = 100;
+        ShootingRoutines.TO_HIVE_TIMEOUT_MS = 100;
+        ShootingRoutines.DECIDE_TIMEOUT_MS = 100;
+        ShootingRoutines.APPROACH_TIMEOUT_MS = 100;
+        ShootingRoutines.PARK_TIMEOUT_MS = 100;
+    }
+
+    @After
+    public void restoreTheLegs() {
+        ShootingRoutines.APPROACH_HIVE_TIMEOUT_MS = approachHive;
+        ShootingRoutines.TO_HIVE_TIMEOUT_MS = toHive;
+        ShootingRoutines.DECIDE_TIMEOUT_MS = decide;
+        ShootingRoutines.APPROACH_TIMEOUT_MS = approach;
+        ShootingRoutines.PARK_TIMEOUT_MS = park;
+    }
+
+    @Test
+    public void everyOptionBuildsFromItsOwnSidesPathsAndFinishes() {
+        for (BlueAutoMenu.Option option : BlueAutoMenu.Option.values()) {
+            SimRobot sim = new SimRobot(new Pose(0, 0, 0));
+            boolean[] decided = {false};
+            Command routine = option.routine.build(sim.robot, Alliance.BLUE, Cell.BLUE_FAR,
+                    new AutoPaths(option.side), shoot -> decided[0] = true);
+            routine.schedule();
+
+            assertTrue(option + " never finished",
+                    sim.cycleUntil(() -> !routine.isScheduled(), 3000));
+            assertTrue(option + " never decided whether to shoot", decided[0]);
+        }
+    }
+
+    @Test
+    public void theMenuWrapsAtBothEnds() {
+        BlueAutoMenu.Option[] all = BlueAutoMenu.Option.values();
+        BlueAutoMenu.Option first = all[0], last = all[all.length - 1];
+        assertEquals(last, first.step(-1));
+        assertEquals(first, last.step(1));
+    }
+}
