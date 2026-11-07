@@ -88,6 +88,38 @@ public final class ShootingRoutines {
      */
     public static double AUTO_INTAKE_POWER = 0.8;
 
+    /** How long {@link #preloadThenFieldCycle} gives each turn, between shooting and collecting. */
+    public static double FIELD_TURN_TIMEOUT_MS = 2000;
+
+    /** How long {@link #preloadThenFieldCycle} gives each leg, out to the end pose and back. */
+    public static double FIELD_LEG_TIMEOUT_MS = 4000;
+
+    /**
+     * How long {@link #preloadThenFieldCycle} gives the speed-limited drive to the end pose.
+     * Must cover the leg at {@code AutoPaths.PRELOAD_AND_FIELD_COLLECT_SPEED_IN_PER_S}: about
+     * 47 in, so raise it if that speed goes below about 10 in/s.
+     */
+    public static double FIELD_COLLECT_TIMEOUT_MS = 6000;
+
+    /**
+     * How long the intake keeps running once the robot reaches the end pose, for the last pollen
+     * to come in. There is no sensor to count them. <b>Placeholder.</b>
+     */
+    public static double FIELD_COLLECT_DWELL_MS = 500;
+
+    /**
+     * How long the transfer and intake feed the collected pollen — must cover all four.
+     * <b>Placeholder</b>: {@link #PRELOAD_FEED_MS} scaled from three pollen to four.
+     */
+    public static double FIELD_FEED_MS = 6500;
+
+    /**
+     * How long the collected pollen's shot waits once aimed, in range and spun up, before
+     * feeding, for the robot to settle after driving back. The flywheel and aim keep running
+     * through it. <b>Placeholder.</b>
+     */
+    public static double FIELD_SHOOT_SETTLE_MS = 750;
+
     private ShootingRoutines() {}
 
     /** {@link #feed(Robot, double)} at {@code Intake.COLLECT_POWER} as it starts: TeleOp's. */
@@ -229,6 +261,45 @@ public final class ShootingRoutines {
         );
     }
 
+    /**
+     * The audience-side preload + field auto: {@link #shootIfUp} the preload, then collect and
+     * shoot four pollen, once, then park — whether it shot or not, since PARK scores either way.
+     * Sequential on purpose (rule 5): each step starts where the last one left the robot. A leg
+     * that times out moves on from wherever the robot got to, and the OpMode's deadline ends
+     * whatever is still running, parking included.
+     *
+     * <p>Shooting closes the range, so it does not leave the robot at the start: the turn uses
+     * {@code Drive.hold}, which also drives back there before the path begins.
+     *
+     * @param shootFrom   where each shot is lined up from, facing the HIVE
+     * @param collectFrom the same place, turned to collect
+     * @param toEnd       built at init, from {@code collectFrom} to the end pose
+     * @param back        built at init, from the end pose to {@code collectFrom}
+     * @param approach    held after the last shot, to get round the HIVE
+     * @param park        built at init, from {@code approach} into the LOADING ZONE
+     * @param onDecided   told at each shot, see {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}
+     */
+    public static Command preloadThenFieldCycle(Robot r, Alliance alliance, Cell target,
+                                                Pose shootFrom, Pose collectFrom,
+                                                Path toEnd, Path back,
+                                                Pose approach, Path park,
+                                                Consumer<Boolean> onDecided) {
+        return Groups.sequential(
+                shootIfUp(r, alliance, target, 0, PRELOAD_FEED_MS, onDecided),
+                Timeouts.limit(r.drive.hold(collectFrom), FIELD_TURN_TIMEOUT_MS),
+                Groups.deadline(
+                        Groups.sequential(
+                                Timeouts.limit(r.drive.follow(toEnd), FIELD_COLLECT_TIMEOUT_MS),
+                                Commands.waitMs(FIELD_COLLECT_DWELL_MS)),
+                        r.intake.collect()),
+                Timeouts.limit(r.drive.follow(back), FIELD_LEG_TIMEOUT_MS),
+                Timeouts.limit(r.drive.hold(shootFrom), FIELD_TURN_TIMEOUT_MS),
+                shootIfUp(r, alliance, target, FIELD_SHOOT_SETTLE_MS, FIELD_FEED_MS, onDecided),
+                Timeouts.limit(r.drive.hold(approach), APPROACH_TIMEOUT_MS),
+                Timeouts.limit(r.drive.follow(park), PARK_TIMEOUT_MS)
+        );
+    }
+
     /** {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}, not reporting the decision. */
     public static Command shootIfUp(Robot r, Alliance alliance, Cell target) {
         return shootIfUp(r, alliance, target, shoot -> {});
@@ -249,6 +320,15 @@ public final class ShootingRoutines {
      */
     public static Command shootIfUp(Robot r, Alliance alliance, Cell target,
                                     Consumer<Boolean> onDecided) {
+        return shootIfUp(r, alliance, target, 0, PRELOAD_FEED_MS, onDecided);
+    }
+
+    /**
+     * {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}, with the shot's timings: see
+     * {@link #rangeAndShoot(Robot, Alliance, double, double)}.
+     */
+    public static Command shootIfUp(Robot r, Alliance alliance, Cell target, double settleMs,
+                                    double feedMs, Consumer<Boolean> onDecided) {
         // Rewritten every cycle of the wait, so it holds the reading that ended it. Built for
         // one run, like every routine here.
         boolean[] up = {false};
@@ -259,7 +339,7 @@ public final class ShootingRoutines {
                             onDecided.accept(up[0]);
                             return up[0];
                         },
-                        rangeAndShoot(r, alliance, PRELOAD_FEED_MS),
+                        rangeAndShoot(r, alliance, settleMs, feedMs),
                         Commands.instant(() -> {}))
         );
     }
@@ -271,11 +351,21 @@ public final class ShootingRoutines {
      * regardless. With the CELL out of view the robot sits still. Finishes when the feed does.
      */
     public static Command rangeAndShoot(Robot r, Alliance alliance, double feedMs) {
+        return rangeAndShoot(r, alliance, 0, feedMs);
+    }
+
+    /**
+     * {@link #rangeAndShoot(Robot, Alliance, double)}, waiting {@code settleMs} between being
+     * ready and feeding, with the flywheel and aim still running.
+     */
+    public static Command rangeAndShoot(Robot r, Alliance alliance, double settleMs,
+                                        double feedMs) {
         DoubleSupplier aimError = () -> r.aimError(alliance);
         return Groups.deadline(
                 Groups.sequential(
                         Timeouts.limit(Commands.waitUntil(() -> readyToShoot(r, alliance)),
                                 RANGE_TIMEOUT_MS),
+                        Commands.waitMs(settleMs),
                         Timeouts.limit(feed(r, AUTO_INTAKE_POWER), feedMs)
                 ),
                 r.outtake.spinFor(() -> r.shotDistance(alliance)),

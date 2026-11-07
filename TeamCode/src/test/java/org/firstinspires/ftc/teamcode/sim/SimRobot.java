@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.sim;
 
 import com.pedropathing.algorithm.Foresight;
+import com.pedropathing.algorithm.ForesightConfig;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
 import com.pedropathing.ivy.Scheduler;
@@ -39,12 +40,14 @@ public final class SimRobot {
     /** What the battery reads, volts; set it to simulate sag. */
     public volatile double volts = Battery.NOMINAL_VOLTS;
     public final Battery battery = new Battery(() -> volts);
+    /** The config the follower runs on, for tests of per-path modifiers. */
+    public final ForesightConfig foresight = SimForesight.config();
     public final Follower follower;
     public final Robot robot;
 
     public SimRobot(Pose start) {
         Scheduler.reset();
-        follower = new Follower(localizer, drivetrain, new Foresight(SimForesight.config()));
+        follower = new Follower(localizer, drivetrain, new Foresight(foresight));
         robot = new Robot(HubManager.NONE, follower, battery, new Intake(intakeMotor.motor),
                 new Transfer(transferMotor.motor), new Outtake(outtakeMotor.motor, battery::volts),
                 new Vision(camera));

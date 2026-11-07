@@ -5,6 +5,8 @@ import com.pedropathing.api.Paths;
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 
+import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+
 /**
  * Every path the autos drive. One set serves both alliances, because the field is
  * rotationally symmetric: blue's start, HIVE and LOADING ZONE are red's turned 180° about the
@@ -90,7 +92,43 @@ public final class AutoPaths {
     public static double SCORING_PARK_FROM_BACK_WALL_IN = 120;
     public static double SCORING_PARK_FROM_ALLIANCE_WALL_IN = 10;
 
+    // PRELOAD + FIELD (audience side)
+    // Inches from the back wall and, in the *_AUDIENCE_WALL_* fields, from the alliance wall, as
+    // in fromWalls(). Not yet driven on a field.
+
+    //Start pose
+    public static double PRELOAD_AND_FIELD_BACK_WALL_START = 9;
+    public static double PRELOAD_AND_FIELD_AUDIENCE_WALL_START = 60;
+
+    //End pose: where the robot has finished collecting.
+    public static double PRELOAD_AND_FIELD_AUDIENCE_WALL_END = 13;
+    public static double PRELOAD_AND_FIELD_BACK_WALL_END = 7.5;
+    // Really going to the edge of the wall to intake (may need to intake at an angle if this doesn't work);
+
+
+
+    /** Heading while collecting, relative to the start; + is CCW, toward the alliance wall. */
+    public static double PRELOAD_AND_FIELD_COLLECT_HEADING_DEG = 90;
+
+    /**
+     * Speed limit on the drive to the end pose, in/s, so the intake has time to take the pollen
+     * instead of the robot ramming them. Only that path; top speed is about 80. <b>Placeholder.</b>
+     */
+    public static double PRELOAD_AND_FIELD_COLLECT_SPEED_IN_PER_S = 20;
+
     public static final Pose START = new Pose(0, 0, 0);
+
+    /** Audience side only, else null: at the start, turned to collect. */
+    public final Pose fieldTurned;
+
+    /** Audience side only, else null: where collecting ends, heading as {@link #fieldTurned}. */
+    public final Pose fieldEnd;
+
+    /** Audience side only, else null: from {@link #fieldTurned} to {@link #fieldEnd}. */
+    public final Path toFieldEnd;
+
+    /** Audience side only, else null: from {@link #fieldEnd} back to {@link #fieldTurned}. */
+    public final Path toFieldStart;
 
     /** Scoring side only, else null: the first stop on the way to {@link #hive}. */
     public final Pose approachHive;
@@ -130,7 +168,21 @@ public final class AutoPaths {
             hive = null;
             toApproachHive = null;
             toHive = null;
+            fieldTurned = START.withHeading(Math.toRadians(PRELOAD_AND_FIELD_COLLECT_HEADING_DEG));
+            fieldEnd = fromWalls(PRELOAD_AND_FIELD_BACK_WALL_END,
+                    PRELOAD_AND_FIELD_AUDIENCE_WALL_END,
+                    PRELOAD_AND_FIELD_BACK_WALL_START, PRELOAD_AND_FIELD_AUDIENCE_WALL_START)
+                    .withHeading(fieldTurned.heading());
+            toFieldEnd = Paths.line(fieldTurned, fieldEnd).constant(fieldTurned)
+                    // In in/s; maxPathSpeed, by contrast, is a fraction of top speed.
+                    .with(Constants.foresightConfig.maxVelocityConstraint
+                            .at(PRELOAD_AND_FIELD_COLLECT_SPEED_IN_PER_S));
+            toFieldStart = Paths.line(fieldEnd, fieldTurned).constant(fieldTurned);
         } else {
+            fieldTurned = null;
+            fieldEnd = null;
+            toFieldEnd = null;
+            toFieldStart = null;
             approachPark = fromWalls(SCORING_APPROACH_PARK_BACK_WALL_IN,
                     SCORING_APPROACH_PARK_ALLIANCE_WALL_IN,
                     SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN);

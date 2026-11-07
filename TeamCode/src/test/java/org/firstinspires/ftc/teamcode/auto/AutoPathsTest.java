@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.pedropathing.math.Pose;
 
+import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -116,6 +117,44 @@ public class AutoPathsTest {
                 paths.hive.x(), 1e-9);
         assertEquals(AutoPaths.SCORING_START_FROM_ALLIANCE_WALL_IN - AutoPaths.SCORING_HIVE_ALLIANCE_WALL_IN,
                 paths.hive.y(), 1e-9);
+    }
+
+    @Test
+    public void theFieldPathsRunBetweenTheTurnedStartAndTheEndPose() {
+        double endBack = AutoPaths.PRELOAD_AND_FIELD_BACK_WALL_END;
+        double endSide = AutoPaths.PRELOAD_AND_FIELD_AUDIENCE_WALL_END;
+        try {
+            AutoPaths.PRELOAD_AND_FIELD_BACK_WALL_END = 21;
+            AutoPaths.PRELOAD_AND_FIELD_AUDIENCE_WALL_END = 20;
+            AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
+
+            assertEquals(Math.PI / 2, paths.fieldTurned.heading(), 1e-9);
+            assertEquals(12, paths.fieldEnd.x(), 1e-9);
+            assertEquals(40, paths.fieldEnd.y(), 1e-9);
+            assertEquals(Math.PI / 2, paths.fieldEnd.heading(), 1e-9);
+            assertEquals(0, paths.toFieldEnd.get(0).x(), 1e-6);
+            assertEquals(paths.fieldEnd.y(), paths.toFieldEnd.get(1).y(), 1e-6);
+            assertEquals(paths.fieldEnd.y(), paths.toFieldStart.get(0).y(), 1e-6);
+            assertEquals(0, paths.toFieldStart.get(1).y(), 1e-6);
+        } finally {
+            AutoPaths.PRELOAD_AND_FIELD_BACK_WALL_END = endBack;
+            AutoPaths.PRELOAD_AND_FIELD_AUDIENCE_WALL_END = endSide;
+        }
+    }
+
+    @Test
+    public void onlyTheDriveToTheEndPoseIsSpeedLimited() {
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
+        assertEquals(1, paths.toFieldEnd.modifiers.size());
+        assertTrue(paths.toFieldStart.modifiers.isEmpty());
+        assertTrue(paths.toPark.modifiers.isEmpty());
+
+        double before = Constants.foresightConfig.maxVelocityConstraint.get();
+        paths.toFieldEnd.modifiers.get(0).apply();
+        assertEquals(AutoPaths.PRELOAD_AND_FIELD_COLLECT_SPEED_IN_PER_S,
+                Constants.foresightConfig.maxVelocityConstraint.get(), 0.0);
+        paths.toFieldEnd.modifiers.get(0).revert();
+        assertEquals(before, Constants.foresightConfig.maxVelocityConstraint.get(), 0.0);
     }
 
     @Test
