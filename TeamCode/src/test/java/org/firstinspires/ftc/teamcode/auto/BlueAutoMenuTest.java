@@ -46,7 +46,7 @@ public class BlueAutoMenuTest {
 
     @Test
     public void everyOptionBuildsFromItsOwnSidesPathsAndFinishes() {
-        for (BlueAutoMenu.Option option : BlueAutoMenu.Option.values()) {
+        for (AutoOption option : AutoMenus.BLUE) {
             SimRobot sim = new SimRobot(new Pose(0, 0, 0));
             boolean[] decided = {false};
             Command routine = option.routine.build(sim.robot, Alliance.BLUE, Cell.BLUE_FAR,
@@ -61,9 +61,8 @@ public class BlueAutoMenuTest {
 
     @Test
     public void theMenuWrapsAtBothEnds() {
-        BlueAutoMenu.Option[] all = BlueAutoMenu.Option.values();
-        BlueAutoMenu.Option first = all[0], last = all[all.length - 1];
-        assertEquals(last, first.step(-1));
-        assertEquals(first, last.step(1));
+        int size = AutoMenus.BLUE.size();
+        assertEquals(size - 1, AutoMenus.step(0, -1, size));
+        assertEquals(0, AutoMenus.step(size - 1, 1, size));
     }
 }
