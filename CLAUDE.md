@@ -59,7 +59,7 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     TestPaths.java — TestAuto's Paths, built at init
 │                     RedPreloadAudienceAuto / BluePreloadAudienceAuto — "Red/Blue: Preload
 │                     Audience": from the Fig. 11-1 start, shoots 3 if the target CELL is up,
-│                     then parks (all four preload autos are on AutoBase)
+│                     then parks (every preload auto is on AutoBase)
 │                     RedPreloadScoringAuto / BluePreloadScoringAuto — "Red/Blue: Preload
 │                     Scoring": from the scoring-side start, drive to the shooting spot, then
 │                     the same shoot-if-up and park (not yet driven on a field)
