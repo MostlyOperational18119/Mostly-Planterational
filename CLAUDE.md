@@ -57,10 +57,9 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
 │                     AimAndShootAuto.java — "Test: Aim and Shoot", no localizer needed
 │                     TestPaths.java — TestAuto's Paths, built at init
-│                     RedPreloadAuto.java — "Red: Preload Only": from the Fig. 11-1 start,
-│                     shoots 3 if the AUDIENCE CELL is up, then parks
-│                     BluePreloadAuto.java — "Blue: Preload Only", the same from the rear
-│                     wall, targeting the FAR CELL
+│                     RedPreloadAudienceAuto / BluePreloadAudienceAuto — "Red/Blue: Preload
+│                     Audience": from the Fig. 11-1 start, shoots 3 if the target CELL is up,
+│                     then parks (all four preload autos are on AutoBase)
 │                     RedPreloadScoringAuto / BluePreloadScoringAuto — "Red/Blue: Preload
 │                     Scoring": from the scoring-side start, drive to the shooting spot, then
 │                     the same shoot-if-up and park (not yet driven on a field)
