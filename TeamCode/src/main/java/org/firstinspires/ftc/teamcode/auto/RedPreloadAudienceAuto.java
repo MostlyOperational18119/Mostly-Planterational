@@ -44,6 +44,6 @@ public class RedPreloadAudienceAuto extends AutoBase {
     @Override
     protected Command buildRoutine(Robot robot, Consumer<Boolean> onDecided) {
         return ShootingRoutines.shootIfUpThenPark(robot, alliance(), target(),
-                paths.approachPark, paths.toPark, onDecided);
+                paths.shootFrom, paths.toPark, onDecided);
     }
 }

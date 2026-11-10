@@ -46,20 +46,22 @@ public final class ShootingRoutines {
      */
     public static double SHOOT_AIM_TOLERANCE_DEG = 3;
 
-    /** How long {@link #shootIfUpThenPark} gives the move round the HIVE after shooting. */
-    public static double APPROACH_TIMEOUT_MS = 3000;
+    /**
+     * How long {@link #shootIfUpThenPark} gives each step of squaring up after shooting: the
+     * turn in place back to the start's heading, then the short drive back to where it shot
+     * from.
+     */
+    public static double SQUARE_UP_TIMEOUT_MS = 1500;
 
     /**
-     * How long {@link #shootIfUpThenPark} gives the drive into the LOADING ZONE. Must cover the
-     * scoring side's, the longer of the two at about 86 in.
+     * How long {@link #shootIfUpThenPark} gives the drive from the shooting spot into the
+     * LOADING ZONE, one path. Must cover the scoring side's, the longer: back under the HIVE
+     * and down to the wall, about 160 in. Cut short under the HIVE, the robot stops there.
      */
-    public static double PARK_TIMEOUT_MS = 5000;
+    public static double PARK_TIMEOUT_MS = 8000;
 
-    /** How long {@link #driveToHiveThenShootAndPark} gives its first leg. */
-    public static double APPROACH_HIVE_TIMEOUT_MS = 3000;
-
-    /** How long {@link #driveToHiveThenShootAndPark} gives its second leg, about 108 in. */
-    public static double TO_HIVE_TIMEOUT_MS = 6000;
+    /** How long {@link #driveToHiveThenShootAndPark} gives the drive to the HIVE, ~160 in. */
+    public static double TO_HIVE_TIMEOUT_MS = 8000;
 
     /**
      * How long {@link #shootIfUp} watches for its target CELL to read up before giving up on
@@ -221,42 +223,55 @@ public final class ShootingRoutines {
     }
 
     /**
-     * The scoring-side preload auto: follows {@code toApproachHive} and {@code toHive}, both
-     * built at init, to where it can see {@code target}, then {@link #shootIfUpThenPark}.
+     * The scoring-side preload auto: follows {@code toHive}, built at init, to where it can see {@code target} ({@code shootFrom}, where
+     * {@code toHive} ends), then {@link #shootIfUpThenPark}.
      * Sequential on purpose (rule 5): it cannot read the CELL until it has arrived. If a leg
      * times out, the routine carries on from wherever the robot got to.
      *
      * @param onDecided see {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}
      */
     public static Command driveToHiveThenShootAndPark(Robot r, Alliance alliance, Cell target,
-                                                      Path toApproachHive, Path toHive,
-                                                      Pose approachPark, Path park,
+                                                      Path toHive, Pose shootFrom, Path park,
                                                       Consumer<Boolean> onDecided) {
         return Groups.sequential(
-                Timeouts.limit(r.drive.follow(toApproachHive), APPROACH_HIVE_TIMEOUT_MS),
                 Timeouts.limit(r.drive.follow(toHive), TO_HIVE_TIMEOUT_MS),
-                shootIfUpThenPark(r, alliance, target, approachPark, park, onDecided)
+                shootIfUpThenPark(r, alliance, target, shootFrom, park, onDecided)
         );
     }
 
     /**
      * The preload auto: {@link #shootIfUp}, then park — whether it shot or not, since PARK
-     * scores either way. Parking drives to {@code approach} with {@code Drive.hold} (it starts
-     * from wherever shooting left the robot, so there is no path to build ahead of time), then
-     * follows {@code park}, built at init, into the LOADING ZONE, and holds there.
+     * scores either way. See {@link #squareUpAndPark} for how it leaves.
      *
      * <p>Sequential on purpose (rule 5): the robot cannot leave while it is still aiming and
-     * feeding. Each move is bounded ({@link #APPROACH_TIMEOUT_MS}, {@link #PARK_TIMEOUT_MS});
-     * if the approach times out, the park path still runs from wherever the robot got to.
+     * feeding. Each move is bounded; if one times out, the next runs from wherever the robot
+     * got to.
      *
+     * @param shootFrom where the robot shot from, at the heading to leave with
+     * @param park      built at init, from {@code shootFrom} into the LOADING ZONE
      * @param onDecided see {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}
      */
     public static Command shootIfUpThenPark(Robot r, Alliance alliance, Cell target,
-                                            Pose approach, Path park,
+                                            Pose shootFrom, Path park,
                                             Consumer<Boolean> onDecided) {
         return Groups.sequential(
                 shootIfUp(r, alliance, target, onDecided),
-                Timeouts.limit(r.drive.hold(approach), APPROACH_TIMEOUT_MS),
+                squareUpAndPark(r, shootFrom, park)
+        );
+    }
+
+    /**
+     * Leaves the shooting spot for the LOADING ZONE without turning near the HIVE. Aiming has
+     * turned the robot and ranging has moved it, and a turned robot's corners swing wider than
+     * a square one (an 18 in square spans 25 in at 45 degrees) — enough to hit the HIVE on a
+     * route the square robot clears. So: turn in place back to {@code shootFrom}'s heading,
+     * drive square back to {@code shootFrom}, and only then follow {@code park}, built at init
+     * with that heading held.
+     */
+    private static Command squareUpAndPark(Robot r, Pose shootFrom, Path park) {
+        return Groups.sequential(
+                Timeouts.limit(r.drive.turnTo(shootFrom.heading()), SQUARE_UP_TIMEOUT_MS),
+                Timeouts.limit(r.drive.hold(shootFrom), SQUARE_UP_TIMEOUT_MS),
                 Timeouts.limit(r.drive.follow(park), PARK_TIMEOUT_MS)
         );
     }
@@ -275,14 +290,12 @@ public final class ShootingRoutines {
      * @param collectFrom the same place, turned to collect
      * @param toEnd       built at init, from {@code collectFrom} to the end pose
      * @param back        built at init, from the end pose to {@code collectFrom}
-     * @param approach    held after the last shot, to get round the HIVE
-     * @param park        built at init, from {@code approach} into the LOADING ZONE
+     * @param park        built at init, from {@code shootFrom} into the LOADING ZONE
      * @param onDecided   told at each shot, see {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}
      */
     public static Command preloadThenFieldCycle(Robot r, Alliance alliance, Cell target,
                                                 Pose shootFrom, Pose collectFrom,
-                                                Path toEnd, Path back,
-                                                Pose approach, Path park,
+                                                Path toEnd, Path back, Path park,
                                                 Consumer<Boolean> onDecided) {
         return Groups.sequential(
                 shootIfUp(r, alliance, target, 0, PRELOAD_FEED_MS, onDecided),
@@ -295,8 +308,7 @@ public final class ShootingRoutines {
                 Timeouts.limit(r.drive.follow(back), FIELD_LEG_TIMEOUT_MS),
                 Timeouts.limit(r.drive.hold(shootFrom), FIELD_TURN_TIMEOUT_MS),
                 shootIfUp(r, alliance, target, FIELD_SHOOT_SETTLE_MS, FIELD_FEED_MS, onDecided),
-                Timeouts.limit(r.drive.hold(approach), APPROACH_TIMEOUT_MS),
-                Timeouts.limit(r.drive.follow(park), PARK_TIMEOUT_MS)
+                squareUpAndPark(r, shootFrom, park)
         );
     }
 

@@ -44,6 +44,6 @@ public class RedPreloadScoringAuto extends AutoBase {
     @Override
     protected Command buildRoutine(Robot robot, Consumer<Boolean> onDecided) {
         return ShootingRoutines.driveToHiveThenShootAndPark(robot, alliance(), target(),
-                paths.toApproachHive, paths.toHive, paths.approachPark, paths.toPark, onDecided);
+                paths.toHive, paths.shootFrom, paths.toPark, onDecided);
     }
 }

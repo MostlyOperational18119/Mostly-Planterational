@@ -44,6 +44,6 @@ public class BluePreloadAndFieldAuto extends AutoBase {
     protected Command buildRoutine(Robot robot, Consumer<Boolean> onDecided) {
         return ShootingRoutines.preloadThenFieldCycle(robot, alliance(), target(),
                 AutoPaths.START, paths.fieldTurned, paths.toFieldEnd, paths.toFieldStart,
-                paths.approachPark, paths.toPark, onDecided);
+                paths.toPark, onDecided);
     }
 }

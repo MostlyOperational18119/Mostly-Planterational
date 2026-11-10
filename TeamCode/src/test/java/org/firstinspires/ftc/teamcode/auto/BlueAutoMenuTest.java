@@ -17,22 +17,18 @@ import org.junit.Test;
 /** Every menu option on the simulated robot, and moving through the menu. */
 public class BlueAutoMenuTest {
 
-    private double approachHive, toHive, decide, approach, park;
+    private double toHive, decide, park;
     private double fieldTurn, fieldCollect, fieldDwell, fieldLeg, fieldSettle;
 
     @Before
     public void shortenTheLegs() {
         // The sim runs in real time. Termination is what is asserted, so the legs need not
         // arrive; the timeouts end them.
-        approachHive = ShootingRoutines.APPROACH_HIVE_TIMEOUT_MS;
         toHive = ShootingRoutines.TO_HIVE_TIMEOUT_MS;
         decide = ShootingRoutines.DECIDE_TIMEOUT_MS;
-        approach = ShootingRoutines.APPROACH_TIMEOUT_MS;
         park = ShootingRoutines.PARK_TIMEOUT_MS;
-        ShootingRoutines.APPROACH_HIVE_TIMEOUT_MS = 100;
         ShootingRoutines.TO_HIVE_TIMEOUT_MS = 100;
         ShootingRoutines.DECIDE_TIMEOUT_MS = 100;
-        ShootingRoutines.APPROACH_TIMEOUT_MS = 100;
         ShootingRoutines.PARK_TIMEOUT_MS = 100;
         fieldTurn = ShootingRoutines.FIELD_TURN_TIMEOUT_MS;
         fieldCollect = ShootingRoutines.FIELD_COLLECT_TIMEOUT_MS;
@@ -48,10 +44,8 @@ public class BlueAutoMenuTest {
 
     @After
     public void restoreTheLegs() {
-        ShootingRoutines.APPROACH_HIVE_TIMEOUT_MS = approachHive;
         ShootingRoutines.TO_HIVE_TIMEOUT_MS = toHive;
         ShootingRoutines.DECIDE_TIMEOUT_MS = decide;
-        ShootingRoutines.APPROACH_TIMEOUT_MS = approach;
         ShootingRoutines.PARK_TIMEOUT_MS = park;
         ShootingRoutines.FIELD_TURN_TIMEOUT_MS = fieldTurn;
         ShootingRoutines.FIELD_COLLECT_TIMEOUT_MS = fieldCollect;

@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.auto;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.pedropathing.math.Pose;
@@ -69,22 +70,166 @@ public class AutoPathsTest {
         assertTrue(AutoPaths.fromWalls(9, 30, 9, 60).y() > 0);
     }
 
+    /**
+     * The far edge of the HIVE's footprint from the alliance wall. Not in the manual's drawings
+     * as used here; the field centre line is the most it can be, so this errs toward a collision.
+     */
+    private static final double HIVE_TO_ALLIANCE_WALL_IN = 72;
+    private static final double FIELD_IN = 144;
+
+    /**
+     * The robot's footprint at {@code t} along {@code path}, turned to the path's heading
+     * there, as its bounding box in wall distances: {back min, back max, side min, side max}.
+     * The box of a turned square is wider than the square, so this errs toward a collision.
+     */
+    private static double[] footprint(com.pedropathing.paths.Path path, double t,
+                                      double startBack, double startSide) {
+        return footprint(path.get(t), path.heading(t), startBack, startSide);
+    }
+
+    /** {@link #footprint(com.pedropathing.paths.Path, double, double, double)} at a pose. */
+    private static double[] footprint(Pose p, double h, double startBack, double startSide) {
+        // Half-extent of a turned square along either axis.
+        double half = HALF_ROBOT_IN * (Math.abs(Math.cos(h)) + Math.abs(Math.sin(h)));
+        double back = p.x() + startBack, side = startSide - p.y();
+        return new double[] {back - half, back + half, side - half, side + half};
+    }
+
+    private static boolean overlapsTheHive(double[] box) {
+        return box[1] > HIVE_FROM_BACK_WALL_IN && box[0] < HIVE_TO_BACK_WALL_IN
+                && box[3] > HIVE_FROM_ALLIANCE_WALL_IN && box[2] < HIVE_TO_ALLIANCE_WALL_IN;
+    }
+
+    /** True if {@code heading} is the start's, i.e. the robot is square to the field. */
+    private static boolean square(double heading) {
+        return Math.abs(Math.atan2(Math.sin(heading - AutoPaths.START.heading()),
+                Math.cos(heading - AutoPaths.START.heading()))) < 1e-6;
+    }
+
+    /** Distance of {@code p} from the line from {@code approachHive} to {@code hive}. */
+    private static double offTheConfirmedLine(Pose p, AutoPaths paths) {
+        double ax = paths.approachHive.x(), ay = paths.approachHive.y();
+        double dx = paths.hive.x() - ax, dy = paths.hive.y() - ay;
+        return Math.abs((p.x() - ax) * dy - (p.y() - ay) * dx) / Math.hypot(dx, dy);
+    }
+
     @Test
-    public void theRouteToTheZoneNeverTouchesTheHive() {
-        // Heading is held at the start's along the route, so the robot stays axis-aligned.
-        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
-        for (int i = 0; i <= 1000; i++) {
-            Pose p = paths.toPark.get(i / 1000.0);
-            double back = fromBackWall(p), side = fromAllianceWall(p);
-            boolean besideTheHive = back + HALF_ROBOT_IN > HIVE_FROM_BACK_WALL_IN
-                    && back - HALF_ROBOT_IN < HIVE_TO_BACK_WALL_IN;
-            if (besideTheHive) {
-                assertTrue(String.format("into the HIVE at t=%.3f: %.1f in from the alliance wall",
-                        i / 1000.0, side), side + HALF_ROBOT_IN < HIVE_FROM_ALLIANCE_WALL_IN);
+    public void eachRouteIsOneSmoothPathRoundItsCorner() {
+        // No stop at the waypoint: the route is a single path, its direction continuous, and it
+        // cuts the corner rather than driving to it.
+        for (AutoPaths.Side s : AutoPaths.Side.values()) {
+            AutoPaths paths = new AutoPaths(s);
+            com.pedropathing.paths.Path[] routes = s == AutoPaths.Side.AUDIENCE
+                    ? new com.pedropathing.paths.Path[] {paths.toPark}
+                    : new com.pedropathing.paths.Path[] {paths.toHive, paths.toPark};
+            Pose[] corners = s == AutoPaths.Side.AUDIENCE
+                    ? new Pose[] {paths.approachPark}
+                    : new Pose[] {paths.approachHive, paths.approachPark};
+            for (int k = 0; k < routes.length; k++) {
+                double closest = Double.MAX_VALUE, worstBend = 0;
+                Pose prev = routes[k].get(0), prevStep = null;
+                for (int i = 1; i <= 2000; i++) {
+                    Pose p = routes[k].get(i / 2000.0);
+                    closest = Math.min(closest, p.distance(corners[k]));
+                    Pose step = new Pose(p.x() - prev.x(), p.y() - prev.y(), 0);
+                    if (prevStep != null && Math.hypot(step.x(), step.y()) > 1e-9
+                            && Math.hypot(prevStep.x(), prevStep.y()) > 1e-9) {
+                        double bend = Math.abs(Math.atan2(
+                                prevStep.x() * step.y() - prevStep.y() * step.x(),
+                                prevStep.x() * step.x() + prevStep.y() * step.y()));
+                        worstBend = Math.max(worstBend, bend);
+                    }
+                    prev = p;
+                    prevStep = step;
+                }
+                String which = s + " route " + k;
+                assertTrue(which + " drives to its corner instead of rounding it", closest > 2);
+                assertTrue(String.format("%s has a sharp turn of %.1f° in one step", which,
+                        Math.toDegrees(worstBend)), worstBend < Math.toRadians(5));
             }
         }
-        assertTrue("approach is not short of the HIVE",
-                fromBackWall(paths.approachPark) + HALF_ROBOT_IN < HIVE_FROM_BACK_WALL_IN);
+    }
+
+    @Test
+    public void theAudienceSideNeverTouchesTheHiveAtAnyHeading() {
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
+        com.pedropathing.paths.Path[] legs = {paths.toPark, paths.toFieldEnd,
+                paths.toFieldStart};
+        String[] names = {"toPark", "toFieldEnd", "toFieldStart"};
+        for (int k = 0; k < legs.length; k++) {
+            for (int i = 0; i <= 1000; i++) {
+                double[] box = footprint(legs[k], i / 1000.0,
+                        AutoPaths.AUDIENCE_START_FROM_BACK_WALL_IN,
+                        AutoPaths.AUDIENCE_START_FROM_ALLIANCE_WALL_IN);
+                assertFalse(String.format("%s into the HIVE at t=%.3f", names[k], i / 1000.0),
+                        overlapsTheHive(box));
+            }
+        }
+    }
+
+    @Test
+    public void theScoringSideIsSquareWheneverItIsUnderTheHive() {
+        // The team confirmed the robot fits under the HIVE square; turned, its corners swing
+        // out and hit it. Every leg near the HIVE must hold the start's heading.
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.SCORING);
+        com.pedropathing.paths.Path[] legs = {paths.toHive, paths.toPark};
+        String[] names = {"toHive", "toPark"};
+        int under = 0;
+        for (int k = 0; k < legs.length; k++) {
+            for (int i = 0; i <= 1000; i++) {
+                double t = i / 1000.0;
+                double[] box = footprint(legs[k], t, AutoPaths.SCORING_START_FROM_BACK_WALL_IN,
+                        AutoPaths.SCORING_START_FROM_ALLIANCE_WALL_IN);
+                if (overlapsTheHive(box)) {
+                    under++;
+                    assertTrue(String.format("%s turned under the HIVE at t=%.3f", names[k], t),
+                            square(legs[k].heading(t)));
+                    // And on the line the team drove, not still rounding a corner: the curve
+                    // must be over before the robot reaches the HIVE.
+                    double off = offTheConfirmedLine(legs[k].get(t), paths);
+                    assertTrue(String.format("%s %.2f in off the confirmed line under the HIVE"
+                            + " at t=%.3f", names[k], off, t), off < 1e-3);
+                }
+            }
+        }
+        assertTrue("never went under the HIVE, so this proves nothing", under > 0);
+        // The way back out is the way in, reversed: the one route known to clear the HIVE.
+        assertEquals(paths.approachHive.x(), paths.approachPark.x(), 1e-9);
+        assertEquals(paths.approachHive.y(), paths.approachPark.y(), 1e-9);
+        // And the robot squares up where it shoots, clear of the HIVE, before it sets off.
+        assertEquals(paths.hive.x(), paths.shootFrom.x(), 1e-9);
+        assertEquals(paths.hive.y(), paths.shootFrom.y(), 1e-9);
+        assertTrue(square(paths.shootFrom.heading()));
+        assertFalse("turning at the shooting spot would swing into the HIVE", overlapsTheHive(
+                footprint(paths.shootFrom, Math.PI / 4, AutoPaths.SCORING_START_FROM_BACK_WALL_IN,
+                        AutoPaths.SCORING_START_FROM_ALLIANCE_WALL_IN)));
+    }
+
+    @Test
+    public void neitherSideDrivesIntoAWall() {
+        // The collecting legs are left out: they drive into the back wall on purpose.
+        for (AutoPaths.Side s : AutoPaths.Side.values()) {
+            AutoPaths paths = new AutoPaths(s);
+            boolean audience = s == AutoPaths.Side.AUDIENCE;
+            double startBack = audience ? AutoPaths.AUDIENCE_START_FROM_BACK_WALL_IN
+                    : AutoPaths.SCORING_START_FROM_BACK_WALL_IN;
+            double startSide = audience ? AutoPaths.AUDIENCE_START_FROM_ALLIANCE_WALL_IN
+                    : AutoPaths.SCORING_START_FROM_ALLIANCE_WALL_IN;
+            com.pedropathing.paths.Path[] legs = audience
+                    ? new com.pedropathing.paths.Path[] {paths.toPark}
+                    : new com.pedropathing.paths.Path[] {paths.toHive, paths.toPark};
+            for (com.pedropathing.paths.Path leg : legs) {
+                for (int i = 0; i <= 1000; i++) {
+                    double[] box = footprint(leg, i / 1000.0, startBack, startSide);
+                    // Starting against a wall is touching it, not driving into it.
+                    String where = String.format("%s side at t=%.3f", s, i / 1000.0);
+                    assertTrue("into the back wall, " + where, box[0] > -1e-6);
+                    assertTrue("into the far wall, " + where, box[1] < FIELD_IN + 1e-6);
+                    assertTrue("into the alliance wall, " + where, box[2] > -1e-6);
+                    assertTrue("into the other side wall, " + where, box[3] < FIELD_IN + 1e-6);
+                }
+            }
+        }
     }
 
     @Test
@@ -104,12 +249,8 @@ public class AutoPathsTest {
     @Test
     public void theScoringSideDrivesToTheHiveThroughItsApproach() {
         AutoPaths paths = new AutoPaths(AutoPaths.Side.SCORING);
-        assertEquals(0, paths.toApproachHive.get(0).x(), 1e-6);
-        assertEquals(0, paths.toApproachHive.get(0).y(), 1e-6);
-        assertEquals(paths.approachHive.x(), paths.toApproachHive.get(1).x(), 1e-6);
-        assertEquals(paths.approachHive.y(), paths.toApproachHive.get(1).y(), 1e-6);
-        assertEquals(paths.approachHive.x(), paths.toHive.get(0).x(), 1e-6);
-        assertEquals(paths.approachHive.y(), paths.toHive.get(0).y(), 1e-6);
+        assertEquals(0, paths.toHive.get(0).x(), 1e-6);
+        assertEquals(0, paths.toHive.get(0).y(), 1e-6);
         assertEquals(paths.hive.x(), paths.toHive.get(1).x(), 1e-6);
         assertEquals(paths.hive.y(), paths.toHive.get(1).y(), 1e-6);
         // As distances from the walls: x grows away from the back wall, y toward the alliance wall.

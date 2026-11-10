@@ -40,8 +40,8 @@ public class ShootingRoutinesTest {
         ShootingRoutines.AIM_TIMEOUT_MS = 2000;
         ShootingRoutines.FEED_MS = 1500;
         ShootingRoutines.SHOOT_AIM_TOLERANCE_DEG = 3;
-        ShootingRoutines.APPROACH_TIMEOUT_MS = 3000;
-        ShootingRoutines.PARK_TIMEOUT_MS = 4000;
+        ShootingRoutines.SQUARE_UP_TIMEOUT_MS = 1500;
+        ShootingRoutines.PARK_TIMEOUT_MS = 8000;
         ShootingRoutines.DECIDE_TIMEOUT_MS = 1000;
         ShootingRoutines.PRELOAD_FEED_MS = 5000;
         ShootingRoutines.RANGE_TIMEOUT_MS = 4000;
@@ -262,7 +262,7 @@ public class ShootingRoutinesTest {
         sim.camera.online = true;
         AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         Command routine = ShootingRoutines.shootIfUpThenPark(sim.robot, Alliance.RED,
-                Cell.RED_FAR, paths.approachPark, paths.toPark, shoot -> {});
+                Cell.RED_FAR, paths.shootFrom, paths.toPark, shoot -> {});
         routine.schedule();
 
         assertTrue("never finished", runSeeingRedFarAt(routine, 49, 15000));
@@ -281,10 +281,9 @@ public class ShootingRoutinesTest {
         Pose[] atDecision = new Pose[1];
         Command routine = ShootingRoutines.driveToHiveThenShootAndPark(sim.robot, Alliance.RED,
                 Cell.RED_FAR,
-                Paths.line(AutoPaths.START, approachHive).constant(AutoPaths.START),
-                Paths.line(approachHive, hive).constant(AutoPaths.START),
-                approachPark,
-                Paths.line(approachPark, park).constant(AutoPaths.START),
+                AutoPaths.rounded(AutoPaths.START, approachHive, hive, 6, 6),
+                hive,
+                AutoPaths.rounded(hive, approachPark, park, 6, 6),
                 shoot -> atDecision[0] = sim.pose());
         routine.schedule();
 
@@ -292,6 +291,52 @@ public class ShootingRoutinesTest {
         assertTrue("did not shoot at an up CELL", fed());
         assertEquals("decided before arriving: x", hive.x(), atDecision[0].x(), 3);
         assertEquals("decided before arriving: y", hive.y(), atDecision[0].y(), 3);
+        assertEquals("not parked: x", park.x(), sim.pose().x(), 2);
+        assertEquals("not parked: y", park.y(), sim.pose().y(), 2);
+    }
+
+    @Test
+    public void afterAnAimedShotTheRobotSquaresUpBeforeItLeaves() {
+        // The scoring side crosses back under the HIVE after shooting, where only a square
+        // robot fits: aiming must be undone before it moves off, not on the way.
+        Outtake.SPIN_UP_MS = 0;
+        ShootingRoutines.PRELOAD_FEED_MS = 200;
+        sim.camera.online = true;
+        Pose approachHive = new Pose(0, 12, 0), hive = new Pose(12, 12, 0);
+        Pose approachPark = new Pose(12, -12, 0), park = new Pose(0, -12, 0);
+        boolean[] decided = {false};
+        Command routine = ShootingRoutines.driveToHiveThenShootAndPark(sim.robot, Alliance.RED,
+                Cell.RED_FAR,
+                AutoPaths.rounded(AutoPaths.START, approachHive, hive, 6, 6),
+                hive,
+                AutoPaths.rounded(hive, approachPark, park, 6, 6),
+                shoot -> decided[0] = true);
+        routine.schedule();
+
+        // The CELL is off to the right of the hive pose (about −17°), so aiming turns.
+        double tx = 50, ty = 0, maxAimTurn = 0, worstAwayFromHive = 0;
+        long deadline = System.nanoTime() + 25_000_000_000L;
+        while (routine.isScheduled() && System.nanoTime() < deadline) {
+            Pose p = sim.pose();
+            double dx = tx - p.x(), dy = ty - p.y(), h = p.heading();
+            sim.camera.sample = new FakeVisionSource.Frame(System.currentTimeMillis(), 0)
+                    .cluster(Cell.RED_FAR, dx * Math.cos(h) + dy * Math.sin(h),
+                            -dx * Math.sin(h) + dy * Math.cos(h), 49)
+                    .build();
+            sim.cycle();
+            if (!decided[0]) continue;
+            double turned = Math.abs(Math.atan2(Math.sin(p.heading()), Math.cos(p.heading())));
+            maxAimTurn = Math.max(maxAimTurn, turned);
+            if (p.distance(hive) > 4) worstAwayFromHive = Math.max(worstAwayFromHive, turned);
+        }
+
+        assertFalse("never finished", routine.isScheduled());
+        assertTrue("did not shoot at an up CELL", fed());
+        assertTrue("never turned to aim, so this proves nothing",
+                maxAimTurn > Math.toRadians(10));
+        assertTrue(String.format("left the shooting spot turned %.1f°",
+                        Math.toDegrees(worstAwayFromHive)),
+                worstAwayFromHive < Math.toRadians(4));
         assertEquals("not parked: x", park.x(), sim.pose().x(), 2);
         assertEquals("not parked: y", park.y(), sim.pose().y(), 2);
     }
@@ -315,8 +360,7 @@ public class ShootingRoutinesTest {
                     Cell.RED_AUDIENCE, AutoPaths.START, turned,
                     Paths.line(turned, end).constant(turned),
                     Paths.line(end, turned).constant(turned),
-                    approachPark,
-                    Paths.line(approachPark, park).constant(AutoPaths.START),
+                    AutoPaths.rounded(AutoPaths.START, approachPark, park, 6, 6),
                     shoot -> {});
             routine.schedule();
 
@@ -442,7 +486,7 @@ public class ShootingRoutinesTest {
         sim.camera.online = true;
         AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         Command routine = ShootingRoutines.shootIfUpThenPark(sim.robot, Alliance.RED,
-                Cell.RED_FAR, paths.approachPark, paths.toPark, shoot -> {});
+                Cell.RED_FAR, paths.shootFrom, paths.toPark, shoot -> {});
         routine.schedule();
 
         assertTrue("never finished", runSeeingRedFarAt(routine, 34, 15000));
