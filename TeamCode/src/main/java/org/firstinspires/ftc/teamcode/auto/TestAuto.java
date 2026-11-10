@@ -22,7 +22,7 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
  * finished — the two numbers to compare against last season. The live loop line keeps
  * updating afterwards, but by then it is mostly idle cycles.
  */
-//@Autonomous(name = "Test: Out and Back", group = "BIOBUZZ Test")
+@Autonomous(name = "Test: Out and Back", group = "BIOBUZZ Test")
 public class TestAuto extends LinearOpMode {
 
     private static final double AUTO_DEADLINE_MS = 28_000;

@@ -27,7 +27,12 @@ final class AutoMenus {
                             d)),
             new AutoOption("Blue Scoring: shoot preload, park", AutoPaths.Side.AUDIENCE,
                     (r, alliance, target, p, d) -> ShootingRoutines.shootIfUpThenPark(r, alliance,
-                            target, p.approachPark, p.toPark, d))));
+                            target, p.approachPark, p.toPark, d)),
+            new AutoOption("Blue Scoring: shoot preload, collect 4, shoot, park",
+                    AutoPaths.Side.AUDIENCE,
+                    (r, alliance, target, p, d) -> ShootingRoutines.preloadThenFieldCycle(r,
+                            alliance, target, AutoPaths.START, p.fieldTurned, p.toFieldEnd,
+                            p.toFieldStart, p.approachPark, p.toPark, d))));
 
     static final List<AutoOption> RED = Collections.unmodifiableList(Arrays.asList(
             new AutoOption("Red Scoring: move to audience wall, shoot, park",
@@ -37,5 +42,10 @@ final class AutoMenus {
                             d)),
             new AutoOption("Red Audience: shoot preload, park", AutoPaths.Side.AUDIENCE,
                     (r, alliance, target, p, d) -> ShootingRoutines.shootIfUpThenPark(r, alliance,
-                            target, p.approachPark, p.toPark, d))));
+                            target, p.approachPark, p.toPark, d)),
+            new AutoOption("Red Audience: shoot preload, collect 4, shoot, park",
+                    AutoPaths.Side.AUDIENCE,
+                    (r, alliance, target, p, d) -> ShootingRoutines.preloadThenFieldCycle(r,
+                            alliance, target, AutoPaths.START, p.fieldTurned, p.toFieldEnd,
+                            p.toFieldStart, p.approachPark, p.toPark, d))));
 }

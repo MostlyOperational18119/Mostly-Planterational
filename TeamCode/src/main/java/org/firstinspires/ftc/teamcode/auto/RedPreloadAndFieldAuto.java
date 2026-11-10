@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  * poses are the {@code PRELOAD_AND_FIELD_*} settings in {@link AutoPaths}. Not yet driven on a
  * field; driving needs Pedro (a localizer and Foresight).
  */
-// @Autonomous(name = "Red: Preload + Field", group = "BIOBUZZ")
+@Autonomous(name = "Red: Preload + Field", group = "BIOBUZZ")
 public class RedPreloadAndFieldAuto extends AutoBase {
 
     private AutoPaths paths;

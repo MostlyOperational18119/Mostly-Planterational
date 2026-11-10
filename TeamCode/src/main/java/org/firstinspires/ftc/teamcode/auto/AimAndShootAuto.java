@@ -22,7 +22,7 @@ import org.firstinspires.ftc.teamcode.util.Timeouts;
  * <p>Choose the alliance during init (X blue, B red); started without one, it does nothing.
  * Place the robot with the alliance's HIVE in the Limelight's view.
  */
-//@Autonomous(name = "Test: Aim and Shoot", group = "BIOBUZZ Test")
+@Autonomous(name = "Test: Aim and Shoot", group = "BIOBUZZ Test")
 public class AimAndShootAuto extends LinearOpMode {
 
     private static final double AUTO_DEADLINE_MS = 28_000;

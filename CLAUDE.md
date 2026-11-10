@@ -67,7 +67,8 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     Field": audience side, shoot the preload, collect 4, shoot
 │                     once more, then park (not yet driven on a field)
 │                     BlueAutoMenu — "Blue: Auto Menu": picks a preset auto in init (dpad
-│                     up/down), each an Option naming its side and routine
+│                     up/down), each an Option naming its side and routine;
+│                     RedAutoMenu likewise. Both offer Preload + Field (AutoMenus)
 │                     AutoPaths.java — every auto's Paths, from the manual's field drawings;
 │                     audience and scoring sides have their own start, approach and park,
 │                     each set shared by both alliances (the field is 180° symmetric)

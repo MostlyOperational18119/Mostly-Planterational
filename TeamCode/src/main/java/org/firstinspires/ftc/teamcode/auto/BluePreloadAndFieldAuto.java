@@ -15,12 +15,12 @@ import java.util.function.Consumer;
  * up, then turns 90°, drives to the end pose collecting four pollen, returns to the start and
  * shoots them the same way, and parks in the blue LOADING ZONE whether it shot or not.
  *
- * <p>Starts where {@link BluePreloadAudienceAuto} does: back against the rear wall, centred on
+ * <p>Starts where {@link BluePreloadScoringAuto} does: back against the rear wall, centred on
  * the third TILE from the blue wall, facing the HIVE. So the target is the FAR CELL. The poses
  * are the {@code PRELOAD_AND_FIELD_*} settings in {@link AutoPaths}. Not yet driven on a field;
  * driving needs Pedro (a localizer and Foresight).
  */
-//@Autonomous(name = "Blue: Preload + Field", group = "BIOBUZZ")
+@Autonomous(name = "Blue: Preload + Field", group = "BIOBUZZ")
 public class BluePreloadAndFieldAuto extends AutoBase {
 
     private AutoPaths paths;
