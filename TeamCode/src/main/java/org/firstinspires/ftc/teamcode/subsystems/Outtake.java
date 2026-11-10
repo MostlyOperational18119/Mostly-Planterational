@@ -52,6 +52,8 @@ import java.util.function.DoubleSupplier;
  *       rpm.</li>
  *   <li><b>P:</b> raise {@link #KP} until the speed recovers quickly after a shot without
  *       oscillating.</li>
+ *   <li><b>I:</b> if it still settles off target, raise {@link #KI} until it closes the gap
+ *       within a second or two without overshooting.</li>
  *   <li><b>Shot table:</b> from several distances, aim, adjust the speed until shots score,
  *       and record the point; paste the printed points into {@link #SHOT_POINTS}. Every speed
  *       must stay below the free speed, so the controller has headroom to recover after a
@@ -63,7 +65,7 @@ import java.util.function.DoubleSupplier;
 public class Outtake implements Subsystem {
 
     /** Flip this, not the power sign, if the flywheel spins backwards. */
-    private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.FORWARD;
+    private static final DcMotorSimple.Direction DIRECTION = DcMotorSimple.Direction.REVERSE;
 
     /**
      * Encoder counts per motor revolution, 1:1 to the flywheel. 28 is what goBILDA's geared
@@ -89,28 +91,42 @@ public class Outtake implements Subsystem {
     /**
      * Fixed launch speed: {@link #spin()}'s target, and {@link #spinFor}'s when it has no
      * distance or no table (today, always — {@link #SHOT_POINTS} is empty). 0 = run open loop
-     * at {@link #SPIN_POWER}. 3000 scores from {@code RangeController.SHOT_DISTANCE_IN}.
+     * at {@link #SPIN_POWER}. 2300 scores from {@code RangeController.SHOT_DISTANCE_IN}.
      */
-    public static double TARGET_RPM = 3000;
+    public static double TARGET_RPM = 2300;
 
     /**
      * Feedforward, power per rpm at {@link Battery#NOMINAL_VOLTS}: 1 / the free speed at power 1
-     * and 12 V ({@code ShotCalibration} does the conversion). Measured on the robot: at 1/5000
-     * the flywheel settles ~25 rpm above a 2750 target, inside {@link #AT_SPEED_TOLERANCE_RPM}.
-     * Too high a KV settles the speed <em>above</em> target — P cannot pull it down, since the
-     * controller never brakes — and feeding, which waits for "at speed", never starts.
+     * and 12 V ({@code ShotCalibration} does the conversion). <b>Estimated, not measured:</b>
+     * after the redesign, KV = 1/5000 settled ~400 rpm under a 3000 target, which with this
+     * {@link #KP} means about 4000 rpm per unit of power.
      */
-    public static double KV = 1.0 / 5000;
+    public static double KV = 1.0 / 4000;
 
     /** Proportional, power per rpm of error. Untuned starting point. */
     public static double KP = 0.0005;
+
+    /**
+     * Integral, power per rpm-second of error: removes the steady error that feedforward plus P
+     * always leaves when {@link #KV} is off. Untuned starting point.
+     */
+    public static double KI = 0.001;
+
+    /**
+     * The integral only accumulates within this of the target, so spin-up and the dip after a
+     * shot, which P and the feedforward handle, do not wind it up.
+     */
+    public static double INTEGRAL_ZONE_RPM = 500;
+
+    /** The most power the integral can add or remove. */
+    public static double MAX_INTEGRAL_POWER = 0.25;
 
     /**
      * Open loop there is no target speed to wait for, so {@link #readyToFeed()} waits this long
      * after the flywheel starts instead. <b>Placeholder</b> — watch the rpm settle after a start
      * and set it to that.
      */
-    public static double SPIN_UP_MS = 1000;
+    public static double SPIN_UP_MS = 1500;
 
     /** Within this of {@link #TARGET_RPM} the flywheel counts as at speed. */
     public static double AT_SPEED_TOLERANCE_RPM = 100;
@@ -132,6 +148,10 @@ public class Outtake implements Subsystem {
 
     // --- what write() last commanded, for telemetry and queries ---
     private double power;
+
+    // --- the integral term, kept by write() ---
+    private double integralPower;
+    private long lastIntegralNanos;     // 0 = no earlier cycle to measure from
 
     /**
      * The competition path: the lookup and one-time motor configuration, at init.
@@ -173,14 +193,42 @@ public class Outtake implements Subsystem {
     }
 
     /**
-     * Feedforward plus P — or {@link #SPIN_POWER} open loop — compensated for the battery and
-     * clipped to [0, 1]: never driven backwards, since reverse power on a spinning flywheel is
-     * a brake. Above target it coasts down instead.
+     * Feedforward plus P and I — or {@link #SPIN_POWER} open loop — compensated for the battery
+     * and clipped to [0, 1]: never driven backwards, since reverse power on a spinning flywheel
+     * is a brake. Above target it coasts down instead.
      */
     private double spinPower() {
-        double p = closedLoop() ? KV * targetRpm + KP * (targetRpm - rpm) : SPIN_POWER;
+        double p = SPIN_POWER;
+        if (closedLoop()) {
+            double error = targetRpm - rpm;
+            updateIntegral(error);
+            p = KV * targetRpm + KP * error + integralPower;
+        } else {
+            resetIntegral();
+        }
         p *= Battery.NOMINAL_VOLTS / volts.getAsDouble();
         return Math.max(0, Math.min(1, p));
+    }
+
+    /**
+     * Accumulates once per cycle by the time since the last one, except outside
+     * {@link #INTEGRAL_ZONE_RPM} or when the motor is already at its limit in that direction:
+     * more integral could not help there, and would only have to unwind later.
+     */
+    private void updateIntegral(double error) {
+        long now = System.nanoTime();
+        boolean saturated = (error > 0 && power >= 1) || (error < 0 && power <= 0);
+        if (lastIntegralNanos != 0 && Math.abs(error) < INTEGRAL_ZONE_RPM && !saturated) {
+            integralPower += KI * error * (now - lastIntegralNanos) / 1e9;
+            integralPower = Math.max(-MAX_INTEGRAL_POWER,
+                    Math.min(MAX_INTEGRAL_POWER, integralPower));
+        }
+        lastIntegralNanos = now;
+    }
+
+    private void resetIntegral() {
+        integralPower = 0;
+        lastIntegralNanos = 0;
     }
 
     /** {@code !(x > 0)} rather than {@code x <= 0}: a NaN target is no target. */
@@ -201,6 +249,7 @@ public class Outtake implements Subsystem {
         targetRpm = 0;
         openLoopPower = 0;
         power = 0;
+        resetIntegral();
         powerGate.invalidate();
         motor.setPower(0);
     }
@@ -282,6 +331,7 @@ public class Outtake implements Subsystem {
                     spinning = true;
                     spinStartNanos = System.nanoTime();
                     targetRpm = rpm.getAsDouble();
+                    resetIntegral();
                 })
                 .setExecute(() -> targetRpm = rpm.getAsDouble())
                 .setDone(() -> false)

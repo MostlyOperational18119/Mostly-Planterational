@@ -51,6 +51,20 @@ public class TransferTest {
     }
 
     @Test
+    public void aPanelsEditAppliesTheNextTimeTheCommandStarts() {
+        double original = Transfer.FEED_POWER;
+        try {
+            Command feed = transfer.feed();
+            Transfer.FEED_POWER = 0.25;
+            feed.schedule();
+            cycle();
+            assertEquals(0.25, transferMotor.power(), 0.0);
+        } finally {
+            Transfer.FEED_POWER = original;
+        }
+    }
+
+    @Test
     public void feedRunsUntilCancelled() {
         Command feed = transfer.feed();
         feed.schedule();
