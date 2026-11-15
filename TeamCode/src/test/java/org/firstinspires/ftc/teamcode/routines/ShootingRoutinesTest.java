@@ -354,13 +354,15 @@ public class ShootingRoutinesTest {
             // A short stand-in for the field's leg: the sim runs in real time.
             Pose turned = AutoPaths.START.withHeading(Math.PI / 2);
             Pose end = new Pose(0, 12, Math.PI / 2);
-            Pose approachPark = new Pose(12, 0, 0), park = new Pose(12, 12, 0);
+            // The second shot faces back at the HIVE's other CELL, 42 in behind the start.
+            Pose secondShot = new Pose(12, 0, Math.PI), park = new Pose(12, 12, Math.PI);
             boolean[] collectedAtTheEnd = {false};
             Command routine = ShootingRoutines.preloadThenFieldCycle(sim.robot, Alliance.RED,
-                    Cell.RED_AUDIENCE, AutoPaths.START, turned,
+                    Cell.RED_AUDIENCE, turned,
                     Paths.line(turned, end).constant(turned),
-                    Paths.line(end, turned).constant(turned),
-                    AutoPaths.rounded(AutoPaths.START, approachPark, park, 6, 6),
+                    Paths.line(end, secondShot).linear(end, secondShot),
+                    secondShot,
+                    Paths.line(secondShot, park).constant(secondShot),
                     shoot -> {});
             routine.schedule();
 
@@ -370,9 +372,12 @@ public class ShootingRoutinesTest {
             int outboundCycles = 0;
             while (routine.isScheduled() && System.nanoTime() < deadline) {
                 Pose p = sim.pose();
-                double dx = 50 - p.x(), dy = -p.y(), h = p.heading();
+                // The preload's shot flips the HIVE: from then on only its other CELL is up.
+                Cell up = feeds == 0 ? Cell.RED_AUDIENCE : Cell.RED_FAR;
+                double tx = up == Cell.RED_AUDIENCE ? 50 : -30;
+                double dx = tx - p.x(), dy = -p.y(), h = p.heading();
                 sim.camera.sample = new FakeVisionSource.Frame(System.currentTimeMillis(), 0)
-                        .cluster(Cell.RED_AUDIENCE, dx * Math.cos(h) + dy * Math.sin(h),
+                        .cluster(up, dx * Math.cos(h) + dy * Math.sin(h),
                                 -dx * Math.sin(h) + dy * Math.cos(h), 49)
                         .build();
                 sim.cycle();

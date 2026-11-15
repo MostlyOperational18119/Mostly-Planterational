@@ -12,15 +12,16 @@ import java.util.function.Consumer;
 
 /**
  * Blue alliance: shoots the preload into the blue HIVE's target CELL if vision sees it facing
- * up, then turns 90°, drives to the end pose collecting four pollen, returns to the start and
- * shoots them the same way, and parks in the blue LOADING ZONE whether it shot or not.
+ * up, then turns 90°, drives to the end pose collecting four pollen, drives along
+ * the alliance wall and round to the HIVE's far end, shoots them into the HIVE's other CELL
+ * if it is up, and parks in the blue LOADING ZONE whether it shot or not.
  *
  * <p>Starts where {@link BluePreloadScoringAuto} does: back against the rear wall, centred on
  * the third TILE from the blue wall, facing the HIVE. So the target is the FAR CELL. The poses
  * are the {@code PRELOAD_AND_FIELD_*} settings in {@link AutoPaths}. Not yet driven on a field;
  * driving needs Pedro (a localizer and Foresight).
  */
-@Autonomous(name = "Blue: Preload + Field", group = "BIOBUZZ")
+//@Autonomous(name = "Blue: Preload + Field", group = "BIOBUZZ")
 public class BluePreloadAndFieldAuto extends AutoBase {
 
     private AutoPaths paths;
@@ -43,7 +44,7 @@ public class BluePreloadAndFieldAuto extends AutoBase {
     @Override
     protected Command buildRoutine(Robot robot, Consumer<Boolean> onDecided) {
         return ShootingRoutines.preloadThenFieldCycle(robot, alliance(), target(),
-                AutoPaths.START, paths.fieldTurned, paths.toFieldEnd, paths.toFieldStart,
-                paths.toPark, onDecided);
+                paths.fieldTurned, paths.toFieldEnd, paths.toFieldShoot, paths.fieldShoot,
+                paths.toParkFromField, onDecided);
     }
 }

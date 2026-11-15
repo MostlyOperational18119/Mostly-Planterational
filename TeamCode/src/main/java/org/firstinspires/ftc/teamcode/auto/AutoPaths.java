@@ -4,6 +4,7 @@ import com.bylazar.configurables.annotations.Configurable;
 import com.pedropathing.api.Paths;
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
+import com.pedropathing.paths.interpolator.Interpolator;
 
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
@@ -93,7 +94,7 @@ public final class AutoPaths {
     // driven on a field.
 
     //Start pose
-    public static double SCORING_START_FROM_BACK_WALL_IN = 120;
+    public static double SCORING_START_FROM_BACK_WALL_IN = 135;
     public static double SCORING_START_FROM_ALLIANCE_WALL_IN = 9;
 
     //Start - Hive prep pose: straight out from the start position, preparing to move underneath the hive to the scoring location
@@ -148,6 +149,40 @@ public final class AutoPaths {
      */
     public static double PRELOAD_AND_FIELD_COLLECT_SPEED_IN_PER_S = 20;
 
+    /**
+     * Where the collected pollen is shot from: past the far end of the HIVE, on its centre line
+     * (the start's distance from the alliance wall), facing back at it. From there the camera
+     * sees the HIVE's other CELL, the one the preload's shot should have flipped up. Inches.
+     */
+    public static double PRELOAD_AND_FIELD_SHOOT_BACK_WALL_IN = 120;
+    /** See {@link #PRELOAD_AND_FIELD_SHOOT_BACK_WALL_IN}. */
+    public static double PRELOAD_AND_FIELD_SHOOT_ALLIANCE_WALL_IN = 60;
+
+    /**
+     * How much of each leg either side of the corner (the park location) the curve from the end
+     * pose to the second shooting spot takes, inches.
+     */
+    public static double PRELOAD_AND_FIELD_CORNER_IN = 20;
+
+    /**
+     * Where along the drive to the second shooting spot the robot turns from collecting to
+     * facing the HIVE, as fractions of the path (0 start, 1 end). Not before it leaves the
+     * alliance wall, which it runs 13 in from: a turned robot's corners swing out (an 18 in
+     * square spans 25 in at 45°). Done before it passes the HIVE's corner, for the same reason.
+     * {@code AutoPathsTest} checks both against the robot's footprint along the whole path.
+     */
+    public static double PRELOAD_AND_FIELD_TURN_FROM = 0.45;
+    /** See {@link #PRELOAD_AND_FIELD_TURN_FROM}. */
+    public static double PRELOAD_AND_FIELD_TURN_TO = 0.72;
+
+    /**
+     * Scoring side: where along the drive from the start to {@link #fieldShoot} the robot
+     * starts turning to face the HIVE, as a fraction of the path; it finishes as it arrives.
+     * Not at once: the start is against the alliance wall, and a turned robot's corners swing
+     * out (an 18 in square spans 25 in at 45 degrees).
+     */
+    public static double SCORING_FAR_SHOOT_TURN_FROM = 0.3;
+
     public static final Pose START = new Pose(0, 0, 0);
 
     /** Audience side only, else null: at the start, turned to collect. */
@@ -159,8 +194,29 @@ public final class AutoPaths {
     /** Audience side only, else null: from {@link #fieldTurned} to {@link #fieldEnd}. */
     public final Path toFieldEnd;
 
-    /** Audience side only, else null: from {@link #fieldEnd} back to {@link #fieldTurned}. */
-    public final Path toFieldStart;
+    /**
+     * Both sides: the shooting spot past the HIVE's far end, facing back at it (the start's
+     * heading turned 180°), at {@link #PRELOAD_AND_FIELD_SHOOT_BACK_WALL_IN} /
+     * {@link #PRELOAD_AND_FIELD_SHOOT_ALLIANCE_WALL_IN}. Where the audience side shoots the
+     * collected pollen, and where the scoring side's wait autos shoot the preload.
+     */
+    public final Pose fieldShoot;
+
+    /**
+     * Both sides: the drive to {@link #fieldShoot}, turning on the way, not in place near a
+     * wall. Audience side: from {@link #fieldEnd}, along the alliance wall with the park
+     * location ({@link #park}) as its corner, so it stays clear of the HIVE, turning between
+     * {@link #PRELOAD_AND_FIELD_TURN_FROM} and {@link #PRELOAD_AND_FIELD_TURN_TO}. Scoring
+     * side: out from the corner start (back 135, alliance 9), turning from
+     * {@link #SCORING_FAR_SHOOT_TURN_FROM}.
+     */
+    public final Path toFieldShoot;
+
+    /**
+     * Both sides: from {@link #fieldShoot} into the LOADING ZONE ({@link #park}), straight,
+     * heading held at {@link #fieldShoot}'s.
+     */
+    public final Path toParkFromField;
 
     /**
      * Scoring side only, else null: the corner of the route to {@link #hive} — out from the
@@ -220,12 +276,22 @@ public final class AutoPaths {
                     // In in/s; maxPathSpeed, by contrast, is a fraction of top speed.
                     .with(Constants.foresightConfig.maxVelocityConstraint
                             .at(PRELOAD_AND_FIELD_COLLECT_SPEED_IN_PER_S));
-            toFieldStart = Paths.line(fieldEnd, fieldTurned).constant(fieldTurned);
+            fieldShoot = fromWalls(PRELOAD_AND_FIELD_SHOOT_BACK_WALL_IN,
+                    PRELOAD_AND_FIELD_SHOOT_ALLIANCE_WALL_IN,
+                    PRELOAD_AND_FIELD_BACK_WALL_START, PRELOAD_AND_FIELD_AUDIENCE_WALL_START)
+                    .withHeading(START.heading() + Math.PI);
+            toFieldShoot = cornered(fieldEnd, park, fieldShoot,
+                    PRELOAD_AND_FIELD_CORNER_IN, PRELOAD_AND_FIELD_CORNER_IN)
+                    .heading(Interpolator.piecewise()
+                            .until(PRELOAD_AND_FIELD_TURN_FROM, Interpolator.constant(fieldEnd))
+                            .until(PRELOAD_AND_FIELD_TURN_TO,
+                                    Interpolator.linear(fieldEnd, fieldShoot))
+                            .until(1, Interpolator.constant(fieldShoot)));
+            toParkFromField = Paths.line(fieldShoot, park).constant(fieldShoot);
         } else {
             fieldTurned = null;
             fieldEnd = null;
             toFieldEnd = null;
-            toFieldStart = null;
             approachPark = fromWalls(SCORING_APPROACH_PARK_BACK_WALL_IN,
                     SCORING_APPROACH_PARK_ALLIANCE_WALL_IN,
                     SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN);
@@ -238,6 +304,15 @@ public final class AutoPaths {
                     SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN);
             toHive = rounded(START, approachHive, hive,
                     SCORING_CORNER_OPEN_LEG_IN, SCORING_CORNER_HIVE_LEG_IN);
+            fieldShoot = fromWalls(PRELOAD_AND_FIELD_SHOOT_BACK_WALL_IN,
+                    PRELOAD_AND_FIELD_SHOOT_ALLIANCE_WALL_IN,
+                    SCORING_START_FROM_BACK_WALL_IN, SCORING_START_FROM_ALLIANCE_WALL_IN)
+                    .withHeading(START.heading() + Math.PI);
+            toFieldShoot = Paths.line(START, fieldShoot)
+                    .heading(Interpolator.piecewise()
+                            .until(SCORING_FAR_SHOOT_TURN_FROM, Interpolator.constant(START))
+                            .until(1, Interpolator.linear(START, fieldShoot)));
+            toParkFromField = Paths.line(fieldShoot, park).constant(fieldShoot);
         }
         shootFrom = side == Side.AUDIENCE ? START : hive;
         toPark = side == Side.AUDIENCE
@@ -255,6 +330,11 @@ public final class AutoPaths {
      * corner's inside. Each length is clamped to its leg; heading held at the start's.
      */
     public static Path rounded(Pose from, Pose corner, Pose to, double inIn, double outIn) {
+        return cornered(from, corner, to, inIn, outIn).constant(START);
+    }
+
+    /** {@link #rounded}'s shape, with no heading set: the caller picks one. */
+    private static Path cornered(Pose from, Pose corner, Pose to, double inIn, double outIn) {
         Pose curveFrom = along(corner, from, inIn);
         Pose curveTo = along(corner, to, outIn);
         java.util.List<Path> pieces = new java.util.ArrayList<>();
@@ -265,9 +345,8 @@ public final class AutoPaths {
             pieces.add(Paths.line(curveFrom, curveTo));    // a corner rounded by nothing
         }
         if (curveTo.distance(to) > 1e-6) pieces.add(Paths.line(curveTo, to));
-        Path path = pieces.size() == 1 ? pieces.get(0)
+        return pieces.size() == 1 ? pieces.get(0)
                 : Paths.path(pieces.toArray(new Path[0]));
-        return path.constant(START);
     }
 
     /** The point {@code lengthIn} from {@code a} toward {@code b}, at most {@code b}. */

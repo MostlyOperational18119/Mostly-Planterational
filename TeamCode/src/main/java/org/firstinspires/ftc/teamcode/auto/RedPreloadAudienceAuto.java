@@ -21,7 +21,7 @@ import java.util.function.Consumer;
  * vision reads for it during init, and the decision is the reading at START. Parking needs
  * Pedro (a localizer and Foresight).
  */
-@Autonomous(name = "Red: Preload Audience", group = "BIOBUZZ")
+//@Autonomous(name = "Red: Preload Audience", group = "BIOBUZZ")
 public class RedPreloadAudienceAuto extends AutoBase {
 
     private AutoPaths paths;

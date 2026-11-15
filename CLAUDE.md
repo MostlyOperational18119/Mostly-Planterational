@@ -64,8 +64,13 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 │                     Scoring": from the scoring-side start, drive to the shooting spot, then
 │                     the same shoot-if-up and park (not yet driven on a field)
 │                     RedPreloadAndFieldAuto / BluePreloadAndFieldAuto — "Red/Blue: Preload +
-│                     Field": audience side, shoot the preload, collect 4, shoot
-│                     once more, then park (not yet driven on a field)
+│                     Field": audience side, shoot the preload, collect 4, drive
+│                     round to the HIVE's far end (back 120, alliance 60) and shoot
+│                     them into its other CELL, then park (not yet driven on a field)
+│                     RedScoringWaitAuto / BlueAudienceWaitAuto — Side.SCORING: from the corner,
+│                     back 135 / alliance 9, drive to that same far-end spot, wait
+│                     WAIT_BEFORE_SHOOT_MS, shoot the preload into the CELL in front
+│                     (RED_FAR / BLUE_AUDIENCE) if up, park (driveToHiveThenWaitThenShoot)
 │                     BlueAutoMenu — "Blue: Auto Menu": picks a preset auto in init (dpad
 │                     up/down), each an Option naming its side and routine;
 │                     RedAutoMenu likewise. Both offer Preload + Field (AutoMenus)

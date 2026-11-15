@@ -18,7 +18,7 @@ import org.junit.Test;
 public class BlueAutoMenuTest {
 
     private double toHive, decide, park;
-    private double fieldTurn, fieldCollect, fieldDwell, fieldLeg, fieldSettle;
+    private double fieldTurn, fieldCollect, fieldDwell, fieldLeg, fieldSettle, waitBefore;
 
     @Before
     public void shortenTheLegs() {
@@ -33,13 +33,15 @@ public class BlueAutoMenuTest {
         fieldTurn = ShootingRoutines.FIELD_TURN_TIMEOUT_MS;
         fieldCollect = ShootingRoutines.FIELD_COLLECT_TIMEOUT_MS;
         fieldDwell = ShootingRoutines.FIELD_COLLECT_DWELL_MS;
-        fieldLeg = ShootingRoutines.FIELD_LEG_TIMEOUT_MS;
+        fieldLeg = ShootingRoutines.FIELD_TO_SHOT_TIMEOUT_MS;
         fieldSettle = ShootingRoutines.FIELD_SHOOT_SETTLE_MS;
         ShootingRoutines.FIELD_TURN_TIMEOUT_MS = 100;
         ShootingRoutines.FIELD_COLLECT_TIMEOUT_MS = 100;
         ShootingRoutines.FIELD_COLLECT_DWELL_MS = 100;
-        ShootingRoutines.FIELD_LEG_TIMEOUT_MS = 100;
+        ShootingRoutines.FIELD_TO_SHOT_TIMEOUT_MS = 100;
         ShootingRoutines.FIELD_SHOOT_SETTLE_MS = 100;
+        waitBefore = ShootingRoutines.WAIT_BEFORE_SHOOT_MS;
+        ShootingRoutines.WAIT_BEFORE_SHOOT_MS = 100;
     }
 
     @After
@@ -50,8 +52,9 @@ public class BlueAutoMenuTest {
         ShootingRoutines.FIELD_TURN_TIMEOUT_MS = fieldTurn;
         ShootingRoutines.FIELD_COLLECT_TIMEOUT_MS = fieldCollect;
         ShootingRoutines.FIELD_COLLECT_DWELL_MS = fieldDwell;
-        ShootingRoutines.FIELD_LEG_TIMEOUT_MS = fieldLeg;
+        ShootingRoutines.FIELD_TO_SHOT_TIMEOUT_MS = fieldLeg;
         ShootingRoutines.FIELD_SHOOT_SETTLE_MS = fieldSettle;
+        ShootingRoutines.WAIT_BEFORE_SHOOT_MS = waitBefore;
     }
 
     @Test

@@ -21,7 +21,7 @@ import java.util.function.Consumer;
  * reads for the target until then. Driving there and parking need Pedro (a localizer and
  * Foresight).
  */
-@Autonomous(name = "Blue: Preload Scoring", group = "BIOBUZZ")
+//@Autonomous(name = "Blue: Preload Scoring", group = "BIOBUZZ")
 public class BluePreloadAudienceAuto extends AutoBase {
 
     private AutoPaths paths;

@@ -154,8 +154,8 @@ public class AutoPathsTest {
     public void theAudienceSideNeverTouchesTheHiveAtAnyHeading() {
         AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         com.pedropathing.paths.Path[] legs = {paths.toPark, paths.toFieldEnd,
-                paths.toFieldStart};
-        String[] names = {"toPark", "toFieldEnd", "toFieldStart"};
+                paths.toFieldShoot, paths.toParkFromField};
+        String[] names = {"toPark", "toFieldEnd", "toFieldShoot", "toParkFromField"};
         for (int k = 0; k < legs.length; k++) {
             for (int i = 0; i <= 1000; i++) {
                 double[] box = footprint(legs[k], i / 1000.0,
@@ -275,8 +275,8 @@ public class AutoPathsTest {
             assertEquals(Math.PI / 2, paths.fieldEnd.heading(), 1e-9);
             assertEquals(0, paths.toFieldEnd.get(0).x(), 1e-6);
             assertEquals(paths.fieldEnd.y(), paths.toFieldEnd.get(1).y(), 1e-6);
-            assertEquals(paths.fieldEnd.y(), paths.toFieldStart.get(0).y(), 1e-6);
-            assertEquals(0, paths.toFieldStart.get(1).y(), 1e-6);
+            assertEquals(paths.fieldEnd.x(), paths.toFieldShoot.get(0).x(), 1e-6);
+            assertEquals(paths.fieldEnd.y(), paths.toFieldShoot.get(0).y(), 1e-6);
         } finally {
             AutoPaths.PRELOAD_AND_FIELD_BACK_WALL_END = endBack;
             AutoPaths.PRELOAD_AND_FIELD_AUDIENCE_WALL_END = endSide;
@@ -284,10 +284,103 @@ public class AutoPathsTest {
     }
 
     @Test
+    public void theCollectedPollenIsShotFromTheHivesFarEndFacingBackAtIt() {
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
+        Pose shoot = paths.fieldShoot;
+        assertEquals(AutoPaths.PRELOAD_AND_FIELD_SHOOT_BACK_WALL_IN, fromBackWall(shoot), 1e-9);
+        assertEquals(AutoPaths.PRELOAD_AND_FIELD_SHOOT_ALLIANCE_WALL_IN,
+                fromAllianceWall(shoot), 1e-9);
+        assertTrue("not past the HIVE's far end",
+                fromBackWall(shoot) - HALF_ROBOT_IN > HIVE_TO_BACK_WALL_IN);
+        // Facing the back wall, i.e. back at the HIVE.
+        assertEquals(-1, Math.cos(shoot.heading()), 1e-9);
+
+        // The drive there starts as collecting left the robot and ends at the spot, turned.
+        com.pedropathing.paths.Path to = paths.toFieldShoot;
+        assertEquals(paths.fieldEnd.x(), to.get(0).x(), 1e-6);
+        assertEquals(paths.fieldEnd.y(), to.get(0).y(), 1e-6);
+        assertEquals(0, Math.cos(to.heading(0) - paths.fieldEnd.heading()) - 1, 1e-6);
+        assertEquals(shoot.x(), to.get(1).x(), 1e-6);
+        assertEquals(shoot.y(), to.get(1).y(), 1e-6);
+        assertEquals(0, Math.cos(to.heading(1) - shoot.heading()) - 1, 1e-6);
+        // Rounding the park location, not driving to it.
+        double closest = Double.MAX_VALUE;
+        for (int i = 0; i <= 1000; i++) closest = Math.min(closest, to.get(i / 1000.0).distance(paths.park));
+        assertTrue("drives to its corner instead of rounding it", closest > 2);
+
+        // And parks from there.
+        assertEquals(shoot.x(), paths.toParkFromField.get(0).x(), 1e-6);
+        assertEquals(paths.park.x(), paths.toParkFromField.get(1).x(), 1e-6);
+        assertEquals(paths.park.y(), paths.toParkFromField.get(1).y(), 1e-6);
+    }
+
+    @Test
+    public void theScoringSideReachesTheFarEndSpotClearOfTheHiveAndWalls() {
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.SCORING);
+        double startBack = AutoPaths.SCORING_START_FROM_BACK_WALL_IN;
+        double startSide = AutoPaths.SCORING_START_FROM_ALLIANCE_WALL_IN;
+        // The same spot, in wall distances, as the audience side's.
+        Pose shoot = paths.fieldShoot;
+        assertEquals(AutoPaths.PRELOAD_AND_FIELD_SHOOT_BACK_WALL_IN, shoot.x() + startBack, 1e-9);
+        assertEquals(AutoPaths.PRELOAD_AND_FIELD_SHOOT_ALLIANCE_WALL_IN, startSide - shoot.y(),
+                1e-9);
+        assertEquals(-1, Math.cos(shoot.heading()), 1e-9);
+
+        com.pedropathing.paths.Path to = paths.toFieldShoot;
+        assertEquals(0, to.get(0).x(), 1e-6);
+        assertEquals(0, to.get(0).y(), 1e-6);
+        assertEquals(1, Math.cos(to.heading(0)), 1e-6);
+        assertEquals(shoot.x(), to.get(1).x(), 1e-6);
+        assertEquals(shoot.y(), to.get(1).y(), 1e-6);
+        assertEquals(-1, Math.cos(to.heading(1)), 1e-6);
+        assertEquals(paths.park.x(), paths.toParkFromField.get(1).x(), 1e-6);
+        assertEquals(paths.park.y(), paths.toParkFromField.get(1).y(), 1e-6);
+
+        com.pedropathing.paths.Path[] legs = {to, paths.toParkFromField};
+        for (int k = 0; k < legs.length; k++) {
+            double sideAtStart = footprint(legs[k], 0, startBack, startSide)[2];
+            for (int i = 0; i <= 1000; i++) {
+                double[] box = footprint(legs[k], i / 1000.0, startBack, startSide);
+                String where = String.format("leg %d at t=%.3f", k, i / 1000.0);
+                assertFalse("into the HIVE, " + where, overlapsTheHive(box));
+                assertTrue("into the back wall, " + where, box[0] > -1e-6);
+                assertTrue("into the far wall, " + where, box[1] < FIELD_IN + 1e-6);
+                // The start is against the alliance wall; never deeper than that.
+                assertTrue("into the alliance wall, " + where,
+                        box[2] > Math.min(0, sideAtStart) - 1e-6);
+                assertTrue("into the other side wall, " + where, box[3] < FIELD_IN + 1e-6);
+            }
+        }
+    }
+
+    @Test
+    public void theDriveToTheSecondShotAndParkStayOffTheWalls() {
+        // The drive to the second shot starts pressed into the back wall, where collecting
+        // left it; it must only move away from there, turning or not.
+        AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
+        double startBack = AutoPaths.PRELOAD_AND_FIELD_BACK_WALL_START;
+        double startSide = AutoPaths.PRELOAD_AND_FIELD_AUDIENCE_WALL_START;
+        com.pedropathing.paths.Path[] legs = {paths.toFieldShoot, paths.toParkFromField};
+        for (int k = 0; k < legs.length; k++) {
+            double backAtStart = footprint(legs[k], 0, startBack, startSide)[0];
+            for (int i = 0; i <= 1000; i++) {
+                double[] box = footprint(legs[k], i / 1000.0, startBack, startSide);
+                String where = String.format("leg %d at t=%.3f", k, i / 1000.0);
+                assertTrue("into the back wall, " + where,
+                        box[0] > Math.min(0, backAtStart) - 1e-6);
+                assertTrue("into the far wall, " + where, box[1] < FIELD_IN + 1e-6);
+                assertTrue("into the alliance wall, " + where, box[2] > -1e-6);
+                assertTrue("into the other side wall, " + where, box[3] < FIELD_IN + 1e-6);
+            }
+        }
+    }
+
+    @Test
     public void onlyTheDriveToTheEndPoseIsSpeedLimited() {
         AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         assertEquals(1, paths.toFieldEnd.modifiers.size());
-        assertTrue(paths.toFieldStart.modifiers.isEmpty());
+        assertTrue(paths.toFieldShoot.modifiers.isEmpty());
+        assertTrue(paths.toParkFromField.modifiers.isEmpty());
         assertTrue(paths.toPark.modifiers.isEmpty());
 
         double before = Constants.foresightConfig.maxVelocityConstraint.get();
