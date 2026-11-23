@@ -34,6 +34,8 @@ public final class SimRobot {
     public final SimDrivetrain drivetrain = new SimDrivetrain();
     public final SimLocalizer localizer = new SimLocalizer(drivetrain);
     public final FakeMotor intakeMotor = new FakeMotor();
+    public final FakeServo intakeServo = new FakeServo();
+    public final FakeServo rampServo = new FakeServo();
     public final FakeMotor transferMotor = new FakeMotor();
     public final FakeMotor outtakeMotor = new FakeMotor();
     public final FakeVisionSource camera = new FakeVisionSource();
@@ -48,7 +50,7 @@ public final class SimRobot {
     public SimRobot(Pose start) {
         Scheduler.reset();
         follower = new Follower(localizer, drivetrain, new Foresight(foresight));
-        robot = new Robot(HubManager.NONE, follower, battery, new Intake(intakeMotor.motor),
+        robot = new Robot(HubManager.NONE, follower, battery, new Intake(intakeMotor.motor, intakeServo.servo, rampServo.servo),
                 new Transfer(transferMotor.motor), new Outtake(outtakeMotor.motor, battery::volts),
                 new Vision(camera));
         follower.setPose(start);

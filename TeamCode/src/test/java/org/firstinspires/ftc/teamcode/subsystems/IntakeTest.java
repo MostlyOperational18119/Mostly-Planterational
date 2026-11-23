@@ -10,6 +10,7 @@ import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
 
 import org.firstinspires.ftc.teamcode.sim.FakeMotor;
+import org.firstinspires.ftc.teamcode.sim.FakeServo;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -19,19 +20,123 @@ import java.util.Arrays;
 public class IntakeTest {
 
     private FakeMotor motor;
+    private FakeServo intakeServo;
+    private FakeServo ramp;
     private Intake intake;
 
     @Before
     public void setUp() {
         Scheduler.reset();
         motor = new FakeMotor();
-        intake = new Intake(motor.motor);
+        intakeServo = new FakeServo();
+        ramp = new FakeServo();
+        intake = new Intake(motor.motor, intakeServo.servo, ramp.servo);
     }
 
     private void cycle() {
         intake.read();
         Scheduler.execute();
         intake.write();
+    }
+
+    @Test
+    public void theServosGoToTheirStartPositionsOnConstructionAndAreNotRewritten() {
+        assertEquals(Arrays.asList(Intake.INTAKE_UP), intakeServo.writes());
+        assertEquals(Arrays.asList(Intake.RAMP_UP), ramp.writes());
+        intake.collect().schedule();
+        for (int i = 0; i < 20; i++) cycle();
+        assertEquals(1, intakeServo.writes().size());
+        assertEquals(1, ramp.writes().size());
+    }
+
+    @Test
+    public void rampCommandsMoveTheRampOnceAndFinish() {
+        Command down = intake.rampDown();
+        down.schedule();
+        cycle();
+        cycle();
+        assertFalse(down.isScheduled());
+        assertEquals(Arrays.asList(Intake.RAMP_UP, Intake.RAMP_DOWN), ramp.writes());
+
+        intake.rampUp().schedule();
+        cycle();
+        assertEquals(Intake.RAMP_UP, ramp.position(), 0.0);
+        assertEquals(3, ramp.writes().size());
+    }
+
+    @Test
+    public void intakeServoCommandsSetEachPosition() {
+        intake.setForNectar().schedule();
+        cycle();
+        assertEquals(Intake.INTAKE_NECTAR, intakeServo.position(), 0.0);
+        intake.setForPollen().schedule();
+        cycle();
+        assertEquals(Intake.INTAKE_POLLEN, intakeServo.position(), 0.0);
+        intake.intakeServoStart().schedule();
+        cycle();
+        assertEquals(Intake.INTAKE_UP, intakeServo.position(), 0.0);
+    }
+
+    @Test
+    public void movingTheServosDoesNotEndCollect() {
+        Command collect = intake.collect();
+        collect.schedule();
+        cycle();
+        intake.rampDown().schedule();
+        intake.setForPollen().schedule();
+        cycle();
+        assertTrue(collect.isScheduled());
+        assertEquals(Arrays.asList(Intake.COLLECT_POWER), motor.writes());
+        assertEquals(Intake.RAMP_DOWN, ramp.position(), 0.0);
+        assertEquals(Intake.INTAKE_POLLEN, intakeServo.position(), 0.0);
+    }
+
+    @Test
+    public void setFlowerLowersTheRampAndRaisesTheIntakeTogether() {
+        double original = Intake.INTAKE_UP;
+        try {
+            Intake.INTAKE_UP = 0.5;     // off where the constructor put it, so the move shows
+            Command collect = intake.collect();
+            collect.schedule();
+            cycle();
+            Command flower = intake.setFlower();
+            flower.schedule();
+            cycle();
+            cycle();
+            assertFalse(flower.isScheduled());
+            assertTrue(collect.isScheduled());
+            assertEquals(Intake.RAMP_DOWN, ramp.position(), 0.0);
+            assertEquals(0.5, intakeServo.position(), 0.0);
+        } finally {
+            Intake.INTAKE_UP = original;
+        }
+    }
+
+    @Test
+    public void setWallRaisesTheRampAndKeepsTheIntakeUp() {
+        intake.setFlower().schedule();
+        intake.setForPollen().schedule();
+        cycle();
+        Command collect = intake.collect();
+        collect.schedule();
+        cycle();
+        Command wall = intake.setWall();
+        wall.schedule();
+        cycle();
+        cycle();
+        assertFalse(wall.isScheduled());
+        assertTrue(collect.isScheduled());
+        assertEquals(Intake.RAMP_UP, ramp.position(), 0.0);
+        assertEquals(Intake.INTAKE_UP, intakeServo.position(), 0.0);
+    }
+
+    @Test
+    public void servoPositionsAreClampedToTheServoRange() {
+        intake.setRamp(1.4).schedule();
+        intake.setIntakeServo(-0.2).schedule();
+        cycle();
+        assertEquals(1.0, ramp.position(), 0.0);
+        assertEquals(0.0, intakeServo.position(), 0.0);
     }
 
     @Test
