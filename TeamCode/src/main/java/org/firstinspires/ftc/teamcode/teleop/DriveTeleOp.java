@@ -72,6 +72,10 @@ public class DriveTeleOp extends LinearOpMode {
                 true);
         Command collect = robot.intake.collect();
         Command eject = robot.intake.eject();
+        Command setWall = robot.intake.setWall();
+        Command setFlower = robot.intake.setFlower();
+        Command nectar = robot.intake.setForNectar();
+        Command pollen = robot.intake.setForPollen();
         // One command over all three requirements: toggling it starts and stops them together.
         Command manualLaunch = Groups.parallel(
                 robot.outtake.spinFor(() -> shotDistance(robot)), ShootingRoutines.feed(robot));
@@ -110,6 +114,12 @@ public class DriveTeleOp extends LinearOpMode {
             // A launch runs the intake itself and holds its requirement throughout, so the
             // bumpers stand down meanwhile: scheduling either would interrupt the launch.
             boolean launching = manualLaunch.isScheduled() || (shoot != null && gamepad1.y);
+            //Flower intake requires manual control of the ramp
+            if (gamepad1.dpadRightWasPressed()) {setWall.schedule();}
+            if (gamepad1.dpadLeftWasPressed()) {setFlower.schedule();}
+            //Pollen vs. nectar requires driver input
+            if (gamepad1.dpadUpWasPressed()) {nectar.schedule();}
+            if (gamepad1.dpadDownWasPressed()) {pollen.schedule();}
             // Eject first: on its release it cancels before collect reschedules, so letting go
             // of eject while still holding collect drops straight back into collecting.
             whileHeld(eject, gamepad1.left_bumper && !launching);

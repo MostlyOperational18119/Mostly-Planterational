@@ -40,8 +40,8 @@ public class ShootingRoutinesTest {
         ShootingRoutines.AIM_TIMEOUT_MS = 2000;
         ShootingRoutines.FEED_MS = 1500;
         ShootingRoutines.SHOOT_AIM_TOLERANCE_DEG = 3;
-        ShootingRoutines.APPROACH_TIMEOUT_MS = 3000;
-        ShootingRoutines.PARK_TIMEOUT_MS = 4000;
+        ShootingRoutines.SQUARE_UP_TIMEOUT_MS = 1500;
+        ShootingRoutines.PARK_TIMEOUT_MS = 8000;
         ShootingRoutines.DECIDE_TIMEOUT_MS = 1000;
         ShootingRoutines.PRELOAD_FEED_MS = 5000;
         ShootingRoutines.RANGE_TIMEOUT_MS = 4000;
@@ -262,7 +262,7 @@ public class ShootingRoutinesTest {
         sim.camera.online = true;
         AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         Command routine = ShootingRoutines.shootIfUpThenPark(sim.robot, Alliance.RED,
-                Cell.RED_FAR, paths.approachPark, paths.toPark, shoot -> {});
+                Cell.RED_FAR, paths.shootFrom, paths.toPark, shoot -> {});
         routine.schedule();
 
         assertTrue("never finished", runSeeingRedFarAt(routine, 49, 15000));
@@ -281,10 +281,9 @@ public class ShootingRoutinesTest {
         Pose[] atDecision = new Pose[1];
         Command routine = ShootingRoutines.driveToHiveThenShootAndPark(sim.robot, Alliance.RED,
                 Cell.RED_FAR,
-                Paths.line(AutoPaths.START, approachHive).constant(AutoPaths.START),
-                Paths.line(approachHive, hive).constant(AutoPaths.START),
-                approachPark,
-                Paths.line(approachPark, park).constant(AutoPaths.START),
+                AutoPaths.rounded(AutoPaths.START, approachHive, hive, 6, 6),
+                hive,
+                AutoPaths.rounded(hive, approachPark, park, 6, 6),
                 shoot -> atDecision[0] = sim.pose());
         routine.schedule();
 
@@ -297,12 +296,202 @@ public class ShootingRoutinesTest {
     }
 
     @Test
+    public void afterAnAimedShotTheRobotSquaresUpBeforeItLeaves() {
+        // The scoring side crosses back under the HIVE after shooting, where only a square
+        // robot fits: aiming must be undone before it moves off, not on the way.
+        Outtake.SPIN_UP_MS = 0;
+        ShootingRoutines.PRELOAD_FEED_MS = 200;
+        sim.camera.online = true;
+        Pose approachHive = new Pose(0, 12, 0), hive = new Pose(12, 12, 0);
+        Pose approachPark = new Pose(12, -12, 0), park = new Pose(0, -12, 0);
+        boolean[] decided = {false};
+        Command routine = ShootingRoutines.driveToHiveThenShootAndPark(sim.robot, Alliance.RED,
+                Cell.RED_FAR,
+                AutoPaths.rounded(AutoPaths.START, approachHive, hive, 6, 6),
+                hive,
+                AutoPaths.rounded(hive, approachPark, park, 6, 6),
+                shoot -> decided[0] = true);
+        routine.schedule();
+
+        // The CELL is off to the right of the hive pose (about −17°), so aiming turns.
+        double tx = 50, ty = 0, maxAimTurn = 0, worstAwayFromHive = 0;
+        long deadline = System.nanoTime() + 25_000_000_000L;
+        while (routine.isScheduled() && System.nanoTime() < deadline) {
+            Pose p = sim.pose();
+            double dx = tx - p.x(), dy = ty - p.y(), h = p.heading();
+            sim.camera.sample = new FakeVisionSource.Frame(System.currentTimeMillis(), 0)
+                    .cluster(Cell.RED_FAR, dx * Math.cos(h) + dy * Math.sin(h),
+                            -dx * Math.sin(h) + dy * Math.cos(h), 49)
+                    .build();
+            sim.cycle();
+            if (!decided[0]) continue;
+            double turned = Math.abs(Math.atan2(Math.sin(p.heading()), Math.cos(p.heading())));
+            maxAimTurn = Math.max(maxAimTurn, turned);
+            if (p.distance(hive) > 4) worstAwayFromHive = Math.max(worstAwayFromHive, turned);
+        }
+
+        assertFalse("never finished", routine.isScheduled());
+        assertTrue("did not shoot at an up CELL", fed());
+        assertTrue("never turned to aim, so this proves nothing",
+                maxAimTurn > Math.toRadians(10));
+        assertTrue(String.format("left the shooting spot turned %.1f°",
+                        Math.toDegrees(worstAwayFromHive)),
+                worstAwayFromHive < Math.toRadians(4));
+        assertEquals("not parked: x", park.x(), sim.pose().x(), 2);
+        assertEquals("not parked: y", park.y(), sim.pose().y(), 2);
+    }
+
+    @Test
+    public void thePreloadAndFieldRoutineShootsTwiceCollectsOnceAndParks() {
+        Outtake.SPIN_UP_MS = 0;
+        ShootingRoutines.PRELOAD_FEED_MS = 200;
+        double fieldFeedMs = ShootingRoutines.FIELD_FEED_MS;
+        double dwellMs = ShootingRoutines.FIELD_COLLECT_DWELL_MS;
+        ShootingRoutines.FIELD_FEED_MS = 200;
+        ShootingRoutines.FIELD_COLLECT_DWELL_MS = 100;
+        try {
+            sim.camera.online = true;
+            // A short stand-in for the field's leg: the sim runs in real time.
+            Pose turned = AutoPaths.START.withHeading(Math.PI / 2);
+            Pose end = new Pose(0, 12, Math.PI / 2);
+            // The second shot faces back at the HIVE's other CELL, 42 in behind the start.
+            Pose secondShot = new Pose(12, 0, Math.PI), park = new Pose(12, 12, Math.PI);
+            boolean[] collectedAtTheEnd = {false};
+            Command routine = ShootingRoutines.preloadThenFieldCycle(sim.robot, Alliance.RED,
+                    Cell.RED_AUDIENCE, turned,
+                    Paths.line(turned, end).constant(turned),
+                    Paths.line(end, secondShot).linear(end, secondShot),
+                    secondShot,
+                    Paths.line(secondShot, park).constant(secondShot),
+                    shoot -> {});
+            routine.schedule();
+
+            long deadline = System.nanoTime() + 40_000_000_000L;
+            int feeds = 0, collects = 0;
+            boolean feeding = false, collecting = false, reachedEnd = false;
+            int outboundCycles = 0;
+            while (routine.isScheduled() && System.nanoTime() < deadline) {
+                Pose p = sim.pose();
+                // The preload's shot flips the HIVE: from then on only its other CELL is up.
+                Cell up = feeds == 0 ? Cell.RED_AUDIENCE : Cell.RED_FAR;
+                double tx = up == Cell.RED_AUDIENCE ? 50 : -30;
+                double dx = tx - p.x(), dy = -p.y(), h = p.heading();
+                sim.camera.sample = new FakeVisionSource.Frame(System.currentTimeMillis(), 0)
+                        .cluster(up, dx * Math.cos(h) + dy * Math.sin(h),
+                                -dx * Math.sin(h) + dy * Math.cos(h), 49)
+                        .build();
+                sim.cycle();
+
+                // The motor itself, not the setpoint, along the whole drive out.
+                if (Math.hypot(end.x() - sim.pose().x(), end.y() - sim.pose().y()) < 2) {
+                    reachedEnd = true;
+                }
+                if (feeds == 1 && !reachedEnd && sim.pose().y() > 2) {
+                    outboundCycles++;
+                    assertEquals("intake motor off on the drive out at y=" + sim.pose().y(),
+                            Intake.COLLECT_POWER, sim.intakeMotor.power(), 0.0);
+                }
+
+                boolean feedingNow = sim.robot.transfer.running();
+                boolean collectingNow = sim.robot.intake.running() && !feedingNow;
+                if (feedingNow && !feeding) feeds++;
+                if (collectingNow && !collecting) collects++;
+                if (collectingNow && Math.hypot(end.x() - sim.pose().x(),
+                        end.y() - sim.pose().y()) < 2) {
+                    collectedAtTheEnd[0] = true;
+                }
+                feeding = feedingNow;
+                collecting = collectingNow;
+            }
+
+            assertFalse("never finished", routine.isScheduled());
+            assertEquals("the preload and one collection", 2, feeds);
+            assertEquals("one trip to the end pose", 1, collects);
+            assertTrue("the intake was off at the end pose", collectedAtTheEnd[0]);
+            assertTrue("never saw the drive out", outboundCycles > 0);
+            assertEquals("not parked: x", park.x(), sim.pose().x(), 2);
+            assertEquals("not parked: y", park.y(), sim.pose().y(), 2);
+            sim.cycle();
+            assertEquals("the intake is left running", 0.0, sim.intakeMotor.power(), 0.0);
+        } finally {
+            ShootingRoutines.FIELD_FEED_MS = fieldFeedMs;
+            ShootingRoutines.FIELD_COLLECT_DWELL_MS = dwellMs;
+        }
+    }
+
+    /** Seconds to follow {@code path} to its end, from wherever the sim is. */
+    private double secondsToFollow(com.pedropathing.paths.Path path) {
+        Command follow = sim.robot.drive.follow(path);
+        follow.schedule();
+        long start = System.nanoTime();
+        assertTrue("never finished", sim.cycleUntil(() -> !follow.isScheduled(), 8000));
+        return (System.nanoTime() - start) / 1e9;
+    }
+
+    @Test
+    public void aPathSpeedLimitSlowsThatPathAndNoOther() {
+        Pose out = new Pose(24, 0, 0);
+        com.pedropathing.config.Modifier limit = sim.foresight.maxVelocityConstraint.at(12.0);
+        double unlimited = sim.foresight.maxVelocityConstraint.get();
+
+        double slow = secondsToFollow(
+                Paths.line(AutoPaths.START, out).constant(AutoPaths.START).with(limit));
+        assertTrue("24 in at 12 in/s took only " + slow + " s", slow >= 1.8);
+
+        double fast = secondsToFollow(Paths.line(out, AutoPaths.START).constant(AutoPaths.START));
+        assertTrue("the limit leaked into the next path: " + fast + " s", fast < slow * 0.7);
+        assertEquals(unlimited, sim.foresight.maxVelocityConstraint.get(), 0.0);
+    }
+
+    @Test
+    public void aSpeedLimitCutShortByItsTimeoutDoesNotLeak() {
+        double unlimited = sim.foresight.maxVelocityConstraint.get();
+        Command cut = com.pedropathing.ivy.groups.Groups.race(
+                sim.robot.drive.follow(Paths.line(AutoPaths.START, new Pose(24, 0, 0))
+                        .constant(AutoPaths.START)
+                        .with(sim.foresight.maxVelocityConstraint.at(12.0))),
+                com.pedropathing.ivy.commands.Commands.waitMs(300));
+        cut.schedule();
+        assertTrue("never finished", sim.cycleUntil(() -> !cut.isScheduled(), 2000));
+        sim.cycle();
+        assertEquals("still limited after the timeout",
+                unlimited, sim.foresight.maxVelocityConstraint.get(), 0.0);
+    }
+
+    @Test
+    public void theSettleWaitDelaysTheFeedWithTheFlywheelStillRunning() {
+        Outtake.SPIN_UP_MS = 0;
+        sim.camera.online = true;
+        // Already at range and straight ahead, so it is ready almost at once.
+        Command routine = ShootingRoutines.rangeAndShoot(sim.robot, Alliance.RED, 300, 100);
+        see(RangeController.SHOT_DISTANCE_IN, 0);
+        sim.cycle();
+        routine.schedule();
+
+        long readyAt = 0, deadline = System.nanoTime() + 3_000_000_000L;
+        while (!sim.robot.transfer.running() && System.nanoTime() < deadline) {
+            see(RangeController.SHOT_DISTANCE_IN, 0);
+            sim.cycle();
+            if (readyAt == 0 && ShootingRoutines.readyToShoot(sim.robot, Alliance.RED)) {
+                readyAt = System.nanoTime();
+            }
+            if (readyAt != 0) {
+                assertTrue("flywheel stopped during the wait", sim.robot.outtake.running());
+            }
+        }
+        assertTrue("never fed", sim.robot.transfer.running());
+        assertTrue("never ready", readyAt != 0);
+        double waitedMs = (System.nanoTime() - readyAt) / 1e6;
+        assertTrue("fed after only " + waitedMs + " ms", waitedMs >= 290);
+    }
+
+    @Test
     public void parksWithoutShootingWhenTheTargetCellIsDown() {
         ShootingRoutines.DECIDE_TIMEOUT_MS = 200;
         sim.camera.online = true;
         AutoPaths paths = new AutoPaths(AutoPaths.Side.AUDIENCE);
         Command routine = ShootingRoutines.shootIfUpThenPark(sim.robot, Alliance.RED,
-                Cell.RED_FAR, paths.approachPark, paths.toPark, shoot -> {});
+                Cell.RED_FAR, paths.shootFrom, paths.toPark, shoot -> {});
         routine.schedule();
 
         assertTrue("never finished", runSeeingRedFarAt(routine, 34, 15000));

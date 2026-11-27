@@ -19,23 +19,49 @@ final class AutoMenus {
         return (index + by % size + size) % size;
     }
 
+    // The WAIT options that drive to the HIVE's far end face its other CELL from there, so they
+    // shoot at the menu target's partner.
     static final List<AutoOption> BLUE = Collections.unmodifiableList(Arrays.asList(
             new AutoOption("Blue Audience: move to audience wall, shoot, park",
                     AutoPaths.Side.SCORING,
                     (r, alliance, target, p, d) -> ShootingRoutines.driveToHiveThenShootAndPark(r,
-                            alliance, target, p.toApproachHive, p.toHive, p.approachPark, p.toPark,
-                            d)),
+                            alliance, target, p.toHive, p.shootFrom, p.toPark, d)),
+            new AutoOption("Blue Audience: drive to HIVE far end, WAIT, shoot, park",
+                    AutoPaths.Side.SCORING,
+                    (r, alliance, target, p, d) -> ShootingRoutines.driveToHiveThenWaitThenShoot(r,
+                            alliance, target.partner(), p.toFieldShoot, p.fieldShoot,
+                            p.toParkFromField, d)),
             new AutoOption("Blue Scoring: shoot preload, park", AutoPaths.Side.AUDIENCE,
                     (r, alliance, target, p, d) -> ShootingRoutines.shootIfUpThenPark(r, alliance,
-                            target, p.approachPark, p.toPark, d))));
+                            target, p.shootFrom, p.toPark, d)),
+            new AutoOption("Blue Scoring: WAIT, shoot preload, park", AutoPaths.Side.AUDIENCE,
+                    (r, alliance, target, p, d) -> ShootingRoutines.waitToShootThenPark(r, alliance,
+                            target, p.shootFrom, p.toPark, d)),
+            new AutoOption("Blue Scoring: shoot preload, collect 4, shoot, park",
+                    AutoPaths.Side.AUDIENCE,
+                    (r, alliance, target, p, d) -> ShootingRoutines.preloadThenFieldCycle(r,
+                            alliance, target, p.fieldTurned, p.toFieldEnd, p.toFieldShoot,
+                            p.fieldShoot, p.toParkFromField, d))));
 
     static final List<AutoOption> RED = Collections.unmodifiableList(Arrays.asList(
             new AutoOption("Red Scoring: move to audience wall, shoot, park",
                     AutoPaths.Side.SCORING,
                     (r, alliance, target, p, d) -> ShootingRoutines.driveToHiveThenShootAndPark(r,
-                            alliance, target, p.toApproachHive, p.toHive, p.approachPark, p.toPark,
-                            d)),
+                            alliance, target, p.toHive, p.shootFrom, p.toPark, d)),
+            new AutoOption("Red Scoring: drive to HIVE far end, WAIT, shoot, park",
+                    AutoPaths.Side.SCORING,
+                    (r, alliance, target, p, d) -> ShootingRoutines.driveToHiveThenWaitThenShoot(r,
+                            alliance, target.partner(), p.toFieldShoot, p.fieldShoot,
+                            p.toParkFromField, d)),
             new AutoOption("Red Audience: shoot preload, park", AutoPaths.Side.AUDIENCE,
                     (r, alliance, target, p, d) -> ShootingRoutines.shootIfUpThenPark(r, alliance,
-                            target, p.approachPark, p.toPark, d))));
+                            target, p.shootFrom, p.toPark, d)),
+            new AutoOption("Red Audience: WAIT, shoot preload, park", AutoPaths.Side.AUDIENCE,
+                    (r, alliance, target, p, d) -> ShootingRoutines.waitToShootThenPark(r, alliance,
+                            target, p.shootFrom, p.toPark, d)),
+            new AutoOption("Red Audience: shoot preload, collect 4, shoot, park",
+                    AutoPaths.Side.AUDIENCE,
+                    (r, alliance, target, p, d) -> ShootingRoutines.preloadThenFieldCycle(r,
+                            alliance, target, p.fieldTurned, p.toFieldEnd, p.toFieldShoot,
+                            p.fieldShoot, p.toParkFromField, d))));
 }

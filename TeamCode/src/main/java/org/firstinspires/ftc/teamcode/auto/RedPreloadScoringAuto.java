@@ -21,7 +21,7 @@ import java.util.function.Consumer;
  * reads for the target until then. Driving there and parking need Pedro (a localizer and
  * Foresight).
  */
-@Autonomous(name = "Red: Preload Scoring", group = "BIOBUZZ")
+//@Autonomous(name = "Red: Preload Scoring", group = "BIOBUZZ")
 public class RedPreloadScoringAuto extends AutoBase {
 
     private AutoPaths paths;
@@ -44,6 +44,6 @@ public class RedPreloadScoringAuto extends AutoBase {
     @Override
     protected Command buildRoutine(Robot robot, Consumer<Boolean> onDecided) {
         return ShootingRoutines.driveToHiveThenShootAndPark(robot, alliance(), target(),
-                paths.toApproachHive, paths.toHive, paths.approachPark, paths.toPark, onDecided);
+                paths.toHive, paths.shootFrom, paths.toPark, onDecided);
     }
 }

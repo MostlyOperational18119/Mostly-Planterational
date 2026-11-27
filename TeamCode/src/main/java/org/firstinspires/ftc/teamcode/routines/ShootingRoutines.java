@@ -46,20 +46,22 @@ public final class ShootingRoutines {
      */
     public static double SHOOT_AIM_TOLERANCE_DEG = 3;
 
-    /** How long {@link #shootIfUpThenPark} gives the move round the HIVE after shooting. */
-    public static double APPROACH_TIMEOUT_MS = 3000;
+    /**
+     * How long {@link #shootIfUpThenPark} gives each step of squaring up after shooting: the
+     * turn in place back to the start's heading, then the short drive back to where it shot
+     * from.
+     */
+    public static double SQUARE_UP_TIMEOUT_MS = 1500;
 
     /**
-     * How long {@link #shootIfUpThenPark} gives the drive into the LOADING ZONE. Must cover the
-     * scoring side's, the longer of the two at about 86 in.
+     * How long {@link #shootIfUpThenPark} gives the drive from the shooting spot into the
+     * LOADING ZONE, one path. Must cover the scoring side's, the longer: back under the HIVE
+     * and down to the wall, about 160 in. Cut short under the HIVE, the robot stops there.
      */
-    public static double PARK_TIMEOUT_MS = 5000;
+    public static double PARK_TIMEOUT_MS = 8000;
 
-    /** How long {@link #driveToHiveThenShootAndPark} gives its first leg. */
-    public static double APPROACH_HIVE_TIMEOUT_MS = 3000;
-
-    /** How long {@link #driveToHiveThenShootAndPark} gives its second leg, about 108 in. */
-    public static double TO_HIVE_TIMEOUT_MS = 6000;
+    /** How long {@link #driveToHiveThenShootAndPark} gives the drive to the HIVE, ~160 in. */
+    public static double TO_HIVE_TIMEOUT_MS = 8000;
 
     /**
      * How long {@link #shootIfUp} watches for its target CELL to read up before giving up on
@@ -87,6 +89,49 @@ public final class ShootingRoutines {
      * <b>Placeholder</b> — raise it towards 1 if pollen still stalls.
      */
     public static double AUTO_INTAKE_POWER = 0.8;
+
+    /** How long {@link #preloadThenFieldCycle} gives each turn, between shooting and collecting. */
+    public static double FIELD_TURN_TIMEOUT_MS = 2000;
+
+    /**
+     * How long {@link #preloadThenFieldCycle} gives the drive from the end pose, along the
+     * alliance wall and round to the HIVE's far end, to shoot the collected pollen: about 140 in.
+     */
+    public static double FIELD_TO_SHOT_TIMEOUT_MS = 6000;
+
+    /**
+     * How long {@link #preloadThenFieldCycle} gives the speed-limited drive to the end pose.
+     * Must cover the leg at {@code AutoPaths.PRELOAD_AND_FIELD_COLLECT_SPEED_IN_PER_S}: about
+     * 47 in, so raise it if that speed goes below about 10 in/s.
+     */
+    public static double FIELD_COLLECT_TIMEOUT_MS = 6000;
+
+    /**
+     * How long the intake keeps running once the robot reaches the end pose, for the last pollen
+     * to come in. There is no sensor to count them. <b>Placeholder.</b>
+     */
+    public static double FIELD_COLLECT_DWELL_MS = 500;
+
+    /**
+     * How long the transfer and intake feed the collected pollen — must cover all four.
+     * <b>Placeholder</b>: {@link #PRELOAD_FEED_MS} scaled from three pollen to four.
+     */
+    public static double FIELD_FEED_MS = 6500;
+
+    /**
+     * How long the collected pollen's shot waits once aimed, in range and spun up, before
+     * feeding, for the robot to settle after driving back. The flywheel and aim keep running
+     * through it. <b>Placeholder.</b>
+     */
+    public static double FIELD_SHOOT_SETTLE_MS = 750;
+
+    /**
+     * How long {@link #waitToShootThenPark} waits before it checks the CELL, shoots and parks.
+     * What is left of the 30 s autonomous must cover the decision, the shot and the park: up
+     * to 21 s with the timeouts above (1 + 4 + 5 + 1.5 + 1.5 + 8), so with all of them running
+     * out the OpMode's deadline would cut the park short. Normally each step ends well early.
+     */
+    public static double WAIT_BEFORE_SHOOT_MS = 8000;
 
     private ShootingRoutines() {}
 
@@ -189,43 +234,126 @@ public final class ShootingRoutines {
     }
 
     /**
-     * The scoring-side preload auto: follows {@code toApproachHive} and {@code toHive}, both
-     * built at init, to where it can see {@code target}, then {@link #shootIfUpThenPark}.
+     * The scoring-side preload auto: follows {@code toHive}, built at init, to where it can see {@code target} ({@code shootFrom}, where
+     * {@code toHive} ends), then {@link #shootIfUpThenPark}.
      * Sequential on purpose (rule 5): it cannot read the CELL until it has arrived. If a leg
      * times out, the routine carries on from wherever the robot got to.
      *
      * @param onDecided see {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}
      */
     public static Command driveToHiveThenShootAndPark(Robot r, Alliance alliance, Cell target,
-                                                      Path toApproachHive, Path toHive,
-                                                      Pose approachPark, Path park,
+                                                      Path toHive, Pose shootFrom, Path park,
                                                       Consumer<Boolean> onDecided) {
         return Groups.sequential(
-                Timeouts.limit(r.drive.follow(toApproachHive), APPROACH_HIVE_TIMEOUT_MS),
                 Timeouts.limit(r.drive.follow(toHive), TO_HIVE_TIMEOUT_MS),
-                shootIfUpThenPark(r, alliance, target, approachPark, park, onDecided)
+                shootIfUpThenPark(r, alliance, target, shootFrom, park, onDecided)
+        );
+    }
+
+    /**
+     * {@link #driveToHiveThenShootAndPark} with a wait at the shooting spot: follows
+     * {@code toHive} to {@code shootFrom}, waits there {@link #WAIT_BEFORE_SHOOT_MS}, and only then checks the
+     * CELL, shoots if it is up, and parks. Through the wait the follower keeps holding the
+     * path's end pose, as it does after any {@code follow}. Not {@code Drive.hold} for the
+     * wait: that finishes as soon as the robot is in place.
+     */
+    public static Command driveToHiveThenWaitThenShoot(Robot r, Alliance alliance, Cell target,
+                                                      Path toHive, Pose shootFrom, Path park,
+                                                      Consumer<Boolean> onDecided) {
+        return Groups.sequential(
+                Timeouts.limit(r.drive.follow(toHive), TO_HIVE_TIMEOUT_MS),
+                Commands.waitMs(WAIT_BEFORE_SHOOT_MS),
+                shootIfUpThenPark(r, alliance, target, shootFrom, park, onDecided)
         );
     }
 
     /**
      * The preload auto: {@link #shootIfUp}, then park — whether it shot or not, since PARK
-     * scores either way. Parking drives to {@code approach} with {@code Drive.hold} (it starts
-     * from wherever shooting left the robot, so there is no path to build ahead of time), then
-     * follows {@code park}, built at init, into the LOADING ZONE, and holds there.
+     * scores either way. See {@link #squareUpAndPark} for how it leaves.
      *
      * <p>Sequential on purpose (rule 5): the robot cannot leave while it is still aiming and
-     * feeding. Each move is bounded ({@link #APPROACH_TIMEOUT_MS}, {@link #PARK_TIMEOUT_MS});
-     * if the approach times out, the park path still runs from wherever the robot got to.
+     * feeding. Each move is bounded; if one times out, the next runs from wherever the robot
+     * got to.
      *
+     * @param shootFrom where the robot shot from, at the heading to leave with
+     * @param park      built at init, from {@code shootFrom} into the LOADING ZONE
      * @param onDecided see {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}
      */
     public static Command shootIfUpThenPark(Robot r, Alliance alliance, Cell target,
-                                            Pose approach, Path park,
+                                            Pose shootFrom, Path park,
                                             Consumer<Boolean> onDecided) {
         return Groups.sequential(
                 shootIfUp(r, alliance, target, onDecided),
-                Timeouts.limit(r.drive.hold(approach), APPROACH_TIMEOUT_MS),
+                squareUpAndPark(r, shootFrom, park)
+        );
+    }
+
+    /**
+     * Leaves the shooting spot for the LOADING ZONE without turning near the HIVE. Aiming has
+     * turned the robot and ranging has moved it, and a turned robot's corners swing wider than
+     * a square one (an 18 in square spans 25 in at 45 degrees) — enough to hit the HIVE on a
+     * route the square robot clears. So: turn in place back to {@code shootFrom}'s heading,
+     * drive square back to {@code shootFrom}, and only then follow {@code park}, built at init
+     * with that heading held.
+     */
+    private static Command squareUpAndPark(Robot r, Pose shootFrom, Path park) {
+        return Groups.sequential(
+                Timeouts.limit(r.drive.turnTo(shootFrom.heading()), SQUARE_UP_TIMEOUT_MS),
+                Timeouts.limit(r.drive.hold(shootFrom), SQUARE_UP_TIMEOUT_MS),
                 Timeouts.limit(r.drive.follow(park), PARK_TIMEOUT_MS)
+        );
+    }
+
+    /**
+     * The audience-side preload + field auto: {@link #shootIfUp} the preload into
+     * {@code target}, collect four pollen, drive round to the HIVE's far end and shoot them into
+     * the other CELL ({@code target.partner()}) if it is up, then park — whether it shot or not,
+     * since PARK scores either way. Scoring the preload should flip the HIVE, putting that CELL
+     * up. Sequential on purpose (rule 5): each step starts where the last one left the robot. A
+     * leg that times out moves on from wherever the robot got to, and the OpMode's deadline
+     * ends whatever is still running, parking included.
+     *
+     * <p>Shooting closes the range, so it does not leave the robot at the start: the turn uses
+     * {@code Drive.hold}, which also drives back there before the path begins.
+     *
+     * @param collectFrom     the start, turned to collect
+     * @param toEnd           built at init, from {@code collectFrom} to the end pose
+     * @param toSecondShot    built at init, from the end pose to {@code secondShotFrom}
+     * @param secondShotFrom  where the collected pollen is shot from, facing the HIVE
+     * @param park            built at init, from {@code secondShotFrom} into the LOADING ZONE
+     * @param onDecided       told at each shot, see {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}
+     */
+    public static Command preloadThenFieldCycle(Robot r, Alliance alliance, Cell target,
+                                                Pose collectFrom, Path toEnd,
+                                                Path toSecondShot, Pose secondShotFrom,
+                                                Path park, Consumer<Boolean> onDecided) {
+        return Groups.sequential(
+                shootIfUp(r, alliance, target, 0, PRELOAD_FEED_MS, onDecided),
+                Timeouts.limit(r.drive.hold(collectFrom), FIELD_TURN_TIMEOUT_MS),
+                Groups.deadline(
+                        Groups.sequential(
+                                Timeouts.limit(r.drive.follow(toEnd), FIELD_COLLECT_TIMEOUT_MS),
+                                Commands.waitMs(FIELD_COLLECT_DWELL_MS)),
+                        r.intake.collect()),
+                Timeouts.limit(r.drive.follow(toSecondShot), FIELD_TO_SHOT_TIMEOUT_MS),
+                shootIfUp(r, alliance, target.partner(), FIELD_SHOOT_SETTLE_MS, FIELD_FEED_MS,
+                        onDecided),
+                squareUpAndPark(r, secondShotFrom, park)
+        );
+    }
+
+    /**
+     * {@link #shootIfUpThenPark}, after first waiting {@link #WAIT_BEFORE_SHOOT_MS} where the
+     * robot starts: the CELL is only checked once the wait is over, so it shoots at whichever
+     * state the HIVE is in then.
+     */
+    public static Command waitToShootThenPark(Robot r, Alliance alliance, Cell target,
+                                            Pose shootFrom, Path park,
+                                            Consumer<Boolean> onDecided) {
+        return Groups.sequential(
+                Commands.waitMs(WAIT_BEFORE_SHOOT_MS),
+                shootIfUp(r, alliance, target, onDecided),
+                squareUpAndPark(r, shootFrom, park)
         );
     }
 
@@ -249,6 +377,15 @@ public final class ShootingRoutines {
      */
     public static Command shootIfUp(Robot r, Alliance alliance, Cell target,
                                     Consumer<Boolean> onDecided) {
+        return shootIfUp(r, alliance, target, 0, PRELOAD_FEED_MS, onDecided);
+    }
+
+    /**
+     * {@link #shootIfUp(Robot, Alliance, Cell, Consumer)}, with the shot's timings: see
+     * {@link #rangeAndShoot(Robot, Alliance, double, double)}.
+     */
+    public static Command shootIfUp(Robot r, Alliance alliance, Cell target, double settleMs,
+                                    double feedMs, Consumer<Boolean> onDecided) {
         // Rewritten every cycle of the wait, so it holds the reading that ended it. Built for
         // one run, like every routine here.
         boolean[] up = {false};
@@ -259,7 +396,7 @@ public final class ShootingRoutines {
                             onDecided.accept(up[0]);
                             return up[0];
                         },
-                        rangeAndShoot(r, alliance, PRELOAD_FEED_MS),
+                        rangeAndShoot(r, alliance, settleMs, feedMs),
                         Commands.instant(() -> {}))
         );
     }
@@ -271,11 +408,21 @@ public final class ShootingRoutines {
      * regardless. With the CELL out of view the robot sits still. Finishes when the feed does.
      */
     public static Command rangeAndShoot(Robot r, Alliance alliance, double feedMs) {
+        return rangeAndShoot(r, alliance, 0, feedMs);
+    }
+
+    /**
+     * {@link #rangeAndShoot(Robot, Alliance, double)}, waiting {@code settleMs} between being
+     * ready and feeding, with the flywheel and aim still running.
+     */
+    public static Command rangeAndShoot(Robot r, Alliance alliance, double settleMs,
+                                        double feedMs) {
         DoubleSupplier aimError = () -> r.aimError(alliance);
         return Groups.deadline(
                 Groups.sequential(
                         Timeouts.limit(Commands.waitUntil(() -> readyToShoot(r, alliance)),
                                 RANGE_TIMEOUT_MS),
+                        Commands.waitMs(settleMs),
                         Timeouts.limit(feed(r, AUTO_INTAKE_POWER), feedMs)
                 ),
                 r.outtake.spinFor(() -> r.shotDistance(alliance)),

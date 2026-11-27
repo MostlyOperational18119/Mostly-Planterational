@@ -57,20 +57,26 @@ TeamCode/src/main/java/org/firstinspires/ftc/teamcode/
 ├── auto/             TestAuto.java — "Test: Out and Back", step 5 of §10
 │                     AimAndShootAuto.java — "Test: Aim and Shoot", no localizer needed
 │                     TestPaths.java — TestAuto's Paths, built at init
-│                     RedPreloadAuto.java — "Red: Preload Only": from the Fig. 11-1 start,
-│                     shoots 3 if the AUDIENCE CELL is up, then parks
-│                     BluePreloadAuto.java — "Blue: Preload Only", the same from the rear
-│                     wall, targeting the FAR CELL
+│                     RedPreloadAudienceAuto / BluePreloadAudienceAuto — "Red/Blue: Preload
+│                     Audience": from the Fig. 11-1 start, shoots 3 if the target CELL is up,
+│                     then parks (every preload auto is on AutoBase)
 │                     RedPreloadScoringAuto / BluePreloadScoringAuto — "Red/Blue: Preload
 │                     Scoring": from the scoring-side start, drive to the shooting spot, then
 │                     the same shoot-if-up and park (not yet driven on a field)
+│                     RedPreloadAndFieldAuto / BluePreloadAndFieldAuto — "Red/Blue: Preload +
+│                     Field": audience side, shoot the preload, collect 4, drive
+│                     round to the HIVE's far end (back 120, alliance 60) and shoot
+│                     them into its other CELL, then park (not yet driven on a field)
+│                     RedScoringWaitAuto / BlueAudienceWaitAuto — Side.SCORING: from the corner,
+│                     back 135 / alliance 9, drive to that same far-end spot, wait
+│                     WAIT_BEFORE_SHOOT_MS, shoot the preload into the CELL in front
+│                     (RED_FAR / BLUE_AUDIENCE) if up, park (driveToHiveThenWaitThenShoot)
 │                     BlueAutoMenu — "Blue: Auto Menu": picks a preset auto in init (dpad
-│                     up/down), each an Option naming its side and routine
+│                     up/down), each an Option naming its side and routine;
+│                     RedAutoMenu likewise. Both offer Preload + Field (AutoMenus)
 │                     AutoPaths.java — every auto's Paths, from the manual's field drawings;
 │                     audience and scoring sides have their own start, approach and park,
 │                     each set shared by both alliances (the field is 180° symmetric)
-│                     AutoPaths.java — every auto's Paths, from the manual's field drawings;
-│                     one set for both alliances (the field is 180° symmetric)
 └── teleop/           DriveTeleOp.java — driver control on the loop contract; hold Y to shoot
                       ShotCalibration.java — measures the flywheel, records SHOT_POINTS
                       DriveMotorTest.java — one drive motor at a time (disabled)

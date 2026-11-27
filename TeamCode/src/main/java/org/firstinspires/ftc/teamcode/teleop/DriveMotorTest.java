@@ -30,7 +30,6 @@ import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
  * and nothing else runs.
  */
 @TeleOp(name = "Test: Drive Motors", group = "BIOBUZZ Test")
-@Disabled
 public class DriveMotorTest extends LinearOpMode {
 
     private static final double POWER = 0.3;

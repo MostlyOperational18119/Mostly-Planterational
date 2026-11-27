@@ -106,7 +106,7 @@ public class Robot {
     /**
      * Hardware-free constructor. Subsystems are handed their collaborators; nothing below this
      * line ever sees a {@code HardwareMap}. That is what keeps the stack constructible off the
-     * robot — {@code new Robot(HubManager.NONE, follower, battery, new Intake(m1),
+     * robot — {@code new Robot(HubManager.NONE, follower, battery, new Intake(m1, s1, s2),
      * new Transfer(m2), new Outtake(m3, battery::volts), new Vision(VisionSource.NONE))}.
      */
     public Robot(HubManager hubs, Follower follower, Battery battery, Intake intake,
